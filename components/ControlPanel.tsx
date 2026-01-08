@@ -21,8 +21,11 @@ interface ControlPanelProps {
   onUseSkill: (skill: string) => void;
   activeSkill: string | null;
   rallyPointSet: boolean;
-  patrolPointSet: boolean; // New
-  onSetStrategy: (strategy: 'CHARGE' | 'DEFEND' | 'PATROL') => void; // Updated
+  patrolPointSet: boolean;
+  vanguardPointSet: boolean; // New
+  vanguardPercentage: number; // New
+  onSetVanguardPct: (pct: number) => void; // New
+  onSetStrategy: (strategy: 'CHARGE' | 'DEFEND' | 'PATROL' | 'VANGUARD') => void; // Updated
   onBuyPopUpgrade: () => void;
   onBuyPassiveGoldUpgrade: () => void;
   onBuyTower: () => void; 
@@ -161,12 +164,11 @@ const SkillButton: React.FC<{
     );
 };
 
-const ControlPanel: React.FC<ControlPanelProps> = ({ gold, population, maxPopulation, heroPopulation, unitCounts, spawnQueue, onBuyUnit, onDismissUnit, onUseSkill, activeSkill, rallyPointSet, patrolPointSet, onSetStrategy, onBuyPopUpgrade, onBuyPassiveGoldUpgrade, onBuyTower, towerCount, passiveGoldLevel, cooldowns, activeTimers, maxDurations, lang }) => {
+const ControlPanel: React.FC<ControlPanelProps> = ({ gold, population, maxPopulation, heroPopulation, unitCounts, spawnQueue, onBuyUnit, onDismissUnit, onUseSkill, activeSkill, rallyPointSet, patrolPointSet, vanguardPointSet, vanguardPercentage, onSetVanguardPct, onSetStrategy, onBuyPopUpgrade, onBuyPassiveGoldUpgrade, onBuyTower, towerCount, passiveGoldLevel, cooldowns, activeTimers, maxDurations, lang }) => {
   const isPopFull = population >= maxPopulation;
   const isHeroFull = heroPopulation >= MAX_HEROES;
   const maxPopReached = maxPopulation >= (MAX_POPULATION + MAX_POP_UPGRADES);
   
-  // Update Income Display Logic: Base 1 + (Level * 2)
   const currentIncome = 1 + (passiveGoldLevel * 2);
   const isPassiveGoldMax = passiveGoldLevel >= MAX_PASSIVE_GOLD_LEVEL; 
   
@@ -282,31 +284,63 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ gold, population, maxPopula
               {/* Strategy Control */}
               <div className="bg-slate-800 p-2 rounded shadow border border-slate-600 flex-1 md:flex-none">
                  <h3 className="text-slate-300 font-bold mb-1 uppercase text-xs tracking-wider">{t.tactics}</h3>
-                 <div className="flex gap-1 h-full items-center justify-center">
+                 <div className="grid grid-cols-2 grid-rows-2 gap-1 h-full w-full md:w-48">
                      
-                     {/* CHARGE */}
+                     {/* 1. DEFEND / RALLY */}
+                     <button
+                        onClick={() => onSetStrategy('DEFEND')}
+                        className={`py-1 px-1 text-sm rounded border font-bold transition-all
+                            ${activeSkill === 'SET_RALLY' || rallyPointSet
+                                ? 'bg-blue-600 border-blue-400 text-white shadow-blue-900/50 shadow' 
+                                : 'bg-slate-700 border-slate-500 text-slate-300 hover:bg-slate-600'}`}
+                     >
+                         <div className="text-sm">🛡️ {t.defend}</div>
+                     </button>
+
+                     {/* 2. CHARGE */}
                      <button
                         onClick={() => onSetStrategy('CHARGE')}
-                        className={`flex-1 py-4 px-4 text-sm rounded border font-bold transition-all min-w-[60px] h-20
-                            ${!rallyPointSet && activeSkill !== 'SET_RALLY' && activeSkill !== 'SET_PATROL'
+                        className={`py-1 px-1 text-sm rounded border font-bold transition-all
+                            ${!rallyPointSet && !vanguardPointSet && activeSkill !== 'SET_PATROL'
                                 ? 'bg-red-600 border-red-400 text-white shadow-red-900/50 shadow' 
                                 : 'bg-slate-700 border-slate-500 text-slate-300 hover:bg-slate-600'}`}
                      >
-                         <div className="text-xl">⚔️</div>
-                         <div className="text-[10px] hidden md:block">{t.charge}</div>
+                         <div className="text-sm">⚔️ {t.charge}</div>
                      </button>
-
-                     {/* PATROL (New) */}
+                     
+                     {/* 3. PATROL */}
                      <button
                         onClick={() => onSetStrategy('PATROL')}
-                        className={`flex-1 py-4 px-4 text-sm rounded border font-bold transition-all min-w-[60px] h-20
+                        className={`py-1 px-1 text-sm rounded border font-bold transition-all
                             ${patrolPointSet || activeSkill === 'SET_PATROL'
                                 ? 'bg-orange-600 border-orange-400 text-white shadow-orange-900/50 shadow' 
                                 : 'bg-slate-700 border-slate-500 text-slate-300 hover:bg-slate-600'}`}
                      >
-                         <div className="text-xl">🚩</div>
-                         <div className="text-[10px] hidden md:block">{t.patrol}</div>
+                         <div className="text-sm">🚩 {t.patrol}</div>
                      </button>
+
+                     {/* 4. VANGUARD (New) */}
+                     <div className="flex gap-1">
+                         <button
+                            onClick={() => onSetStrategy('VANGUARD')}
+                            className={`flex-1 py-1 px-1 text-sm rounded border font-bold transition-all
+                                ${vanguardPointSet || activeSkill === 'SET_VANGUARD'
+                                    ? 'bg-green-600 border-green-400 text-white shadow-green-900/50 shadow' 
+                                    : 'bg-slate-700 border-slate-500 text-slate-300 hover:bg-slate-600'}`}
+                         >
+                             <div className="text-sm">🔰</div>
+                         </button>
+                         <button 
+                             onClick={() => {
+                                 const next = vanguardPercentage >= 0.5 ? 0.2 : (vanguardPercentage === 0.3 ? 0.5 : 0.3);
+                                 onSetVanguardPct(next);
+                             }}
+                             className="w-8 bg-slate-900 text-green-400 text-[10px] font-mono border border-slate-600 rounded flex items-center justify-center"
+                             title="Vanguard Size %"
+                         >
+                             {Math.floor(vanguardPercentage * 100)}%
+                         </button>
+                     </div>
 
                  </div>
               </div>

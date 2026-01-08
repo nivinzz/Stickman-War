@@ -20,7 +20,8 @@ export enum UnitState {
   MINE_GATHERING = 'MINE_GATHERING',
   MINE_RETURN = 'MINE_RETURN',
   DIE = 'DIE',     
-  DEAD = 'DEAD'    
+  DEAD = 'DEAD',
+  RETREAT = 'RETREAT' // AI Specific state
 }
 
 export interface UnitStats {
@@ -54,6 +55,9 @@ export interface Unit {
   
   // Patrol State
   patrolHeading?: 'A' | 'B'; // A = Rally Point (Blue), B = Patrol Point (Red)
+  
+  // Vanguard State
+  isVanguard?: boolean; // If true, follows Green Flag
 
   // Status Effects
   freezeTimer: number; // Keep for lingering slow if needed

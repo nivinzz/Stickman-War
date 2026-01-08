@@ -44,11 +44,14 @@ export class GameEngine {
   paused: boolean = true; 
   started: boolean = false;
   
-  rallyPoint: number | null = null; 
-  patrolPoint: number | null = null; 
+  // Player Strategy Flags
+  rallyPoint: number | null = null; // Blue (Main)
+  patrolPoint: number | null = null; // Red (Patrol End)
+  vanguardPoint: number | null = null; // Green (Vanguard/Shield)
+  vanguardPercentage: number = 0; // 0, 0.2, 0.3, 0.5
   
   // --- AI LOGIC PROPERTIES ---
-  aiState: 'ATTACK' | 'DEFEND' | 'MASSING' = 'ATTACK';
+  aiState: 'ATTACK' | 'DEFEND' | 'MASSING' | 'PROBE' | 'RETREAT' = 'ATTACK';
   aiStateTimer: number = 0;
   enemySkillCooldowns: { ARROW_RAIN: number; LIGHTNING: number; FREEZE: number } = { ARROW_RAIN: 0, LIGHTNING: 0, FREEZE: 0 };
 
@@ -180,10 +183,22 @@ export class GameEngine {
       this.onStateChange(this);
   }
 
+  setVanguardPoint(x: number) {
+      if (!this.started || this.paused) return;
+      this.vanguardPoint = x;
+      this.onStateChange(this);
+  }
+
+  setVanguardPercentage(pct: number) {
+      this.vanguardPercentage = pct;
+      this.onStateChange(this);
+  }
+
   clearRallyPoint() {
       if (!this.started || this.paused) return;
       this.rallyPoint = null;
       this.patrolPoint = null; 
+      this.vanguardPoint = null;
       this.onStateChange(this);
   }
   
@@ -359,7 +374,6 @@ export class GameEngine {
     const isPlayer = faction === Faction.PLAYER;
     const upgrades = isPlayer ? this.upgrades : this.enemyUpgrades;
 
-    // 1. Determine Upgrade Level
     let unitUpgradeLevel = 0;
     if (type === UnitType.SWORDMAN) unitUpgradeLevel = upgrades.swordDamage;
     else if (type === UnitType.ARCHER) unitUpgradeLevel = upgrades.archerDamage;
@@ -367,10 +381,8 @@ export class GameEngine {
     else if (type === UnitType.HERO) unitUpgradeLevel = upgrades.heroPower;
     else if (type === UnitType.MINER) unitUpgradeLevel = upgrades.minerSpeed;
 
-    // 2. Calculate Base Stats based on Upgrades
     let stats = calculateUnitStats(type, unitUpgradeLevel);
 
-    // 3. AI Extra Scaling
     let sizeMultiplier = 1;
     if (!isPlayer) {
         const levelScaling = 1 + (this.level.level * 0.05);
@@ -394,18 +406,19 @@ export class GameEngine {
       x: isPlayer ? PLAYER_BASE_X : ENEMY_BASE_X,
       y: GROUND_Y,
       state: type === UnitType.MINER ? UnitState.MINE_WALK_TO_MINE : UnitState.MOVE,
-      stats: stats, // Use the calculated stats
+      stats: stats,
       lastAttackFrame: 0,
       targetId: null,
       width: 20 * sizeMultiplier,
       height: (type === UnitType.HERO ? 60 : 40) * sizeMultiplier,
       animationFrame: 0,
       rotation: 0,
-      deathTimer: 60, // 1 Second linger
+      deathTimer: 60,
       opacity: 1,
       freezeTimer: 0,
       isSlowed: false,
-      patrolHeading: 'A'
+      patrolHeading: 'A',
+      isVanguard: false // Default to Main Army
     };
 
     unit.y += (Math.random() * 20 - 10);
@@ -679,6 +692,43 @@ export class GameEngine {
       this.fireworks = this.fireworks.filter(fw => !fw.exploded || fw.particles.length > 0);
   }
 
+  // --- VANGUARD MANAGEMENT ---
+  manageVanguard() {
+      if (this.frame % 30 !== 0) return; // Check twice per second
+
+      // 1. Get pool of potential recruits (Player non-miner, non-hero, alive)
+      const army = this.units.filter(u => 
+          u.faction === Faction.PLAYER && 
+          u.type !== UnitType.MINER && 
+          u.type !== UnitType.HERO && // Heroes stick to main army
+          u.state !== UnitState.DEAD && 
+          u.state !== UnitState.DIE
+      );
+
+      const targetVanguardCount = Math.floor(army.length * this.vanguardPercentage);
+      let currentVanguard = army.filter(u => u.isVanguard);
+
+      if (currentVanguard.length < targetVanguardCount) {
+          // NEED MORE: Recruit from the army (pick those closest to enemy or just random)
+          // Sort by X (closest to enemy) to simulate frontline troops staying there
+          const nonVanguard = army.filter(u => !u.isVanguard).sort((a,b) => b.x - a.x);
+          const needed = targetVanguardCount - currentVanguard.length;
+          
+          for(let i=0; i<needed && i<nonVanguard.length; i++) {
+              nonVanguard[i].isVanguard = true;
+          }
+      } else if (currentVanguard.length > targetVanguardCount) {
+          // TOO MANY: Dismiss from vanguard (send back to main force)
+          // Sort by X (closest to base) to retreat the rear-guard of the vanguard first
+          const surplus = currentVanguard.length - targetVanguardCount;
+          currentVanguard.sort((a,b) => a.x - b.x); // Low X first
+          
+          for(let i=0; i<surplus; i++) {
+              currentVanguard[i].isVanguard = false;
+          }
+      }
+  }
+
   update() {
     if (this.paused) return; 
     
@@ -690,10 +740,11 @@ export class GameEngine {
     if (this.gameOver || this.victory) return;
     
     this.frame++;
-    this.levelTimer++; // Increment elapsed time for level
+    this.levelTimer++; 
 
     if (this.screenShake > 0) this.screenShake *= 0.9;
     
+    // Cooldowns Management
     if (this.skillCooldowns.ARROW_RAIN > 0) this.skillCooldowns.ARROW_RAIN--;
     if (this.skillCooldowns.LIGHTNING > 0) this.skillCooldowns.LIGHTNING--;
     if (this.skillCooldowns.FREEZE > 0) this.skillCooldowns.FREEZE--;
@@ -706,6 +757,7 @@ export class GameEngine {
     if (this.enemySkillCooldowns.LIGHTNING > 0) this.enemySkillCooldowns.LIGHTNING--;
     if (this.enemySkillCooldowns.FREEZE > 0) this.enemySkillCooldowns.FREEZE--;
 
+    // Fog of War Calculation
     let pMaxVis = PLAYER_BASE_X + FOG_OF_WAR_RANGE;
     let eMinVis = ENEMY_BASE_X - FOG_OF_WAR_RANGE;
 
@@ -721,12 +773,13 @@ export class GameEngine {
     this.playerVisibleX = Math.min(pMaxVis, WORLD_WIDTH);
     this.enemyVisibleX = Math.max(eMinVis, 0);
 
-    // --- GOLD INCOME ---
+    // Passive Gold
     const passiveIncome = 1 + ((this.upgrades.passiveGold || 0) * 2); 
     if (this.frame % 60 === 0) {
         this.gold += passiveIncome;
     }
 
+    this.manageVanguard(); // Process Vanguard assignments
     this.updateQueues();
     this.updateAI();
     this.updateHazards(); 
@@ -758,20 +811,12 @@ export class GameEngine {
   }
 
   updateUnits() {
-    // 1. Filter out dead/decayed units
     this.units = this.units.filter(u => u.state !== UnitState.DEAD);
 
-    // 2. Process each unit
     this.units.forEach(unit => {
       if (unit.state === UnitState.DIE) {
         unit.deathTimer--;
-        
-        // --- DEATH ANIMATION: FALL BACKWARDS ---
-        // Rotate up to 90 degrees (PI/2)
-        if (unit.rotation < Math.PI / 2) {
-             unit.rotation += 0.1;
-        }
-
+        if (unit.rotation < Math.PI / 2) unit.rotation += 0.1;
         unit.opacity = unit.deathTimer / 60;
         if (unit.deathTimer <= 0) unit.state = UnitState.DEAD;
         return;
@@ -787,17 +832,15 @@ export class GameEngine {
         unit.isSlowed = false;
       }
       
-      // Check for Hazards (Freeze Zones)
       const inHazard = this.hazards.find(h => 
         h.faction !== unit.faction && 
         unit.x >= h.x && unit.x <= h.x + h.width &&
-        Math.abs(unit.y - h.y) < 50 // Rough Y check
+        Math.abs(unit.y - h.y) < 50 
       );
 
       if (inHazard) {
           speedMult *= inHazard.slowFactor;
           if (this.frame % 60 === 0) {
-              // DOT
               unit.stats.hp -= unit.stats.maxHp * inHazard.damagePercent;
               if (unit.stats.hp <= 0) {
                   unit.state = UnitState.DIE;
@@ -806,14 +849,12 @@ export class GameEngine {
           }
       }
 
-      // Logic per type
       if (unit.type === UnitType.MINER) {
           this.updateMiner(unit, speedMult);
       } else {
           this.updateCombatUnit(unit, speedMult);
       }
       
-      // Animation
       unit.animationFrame++;
     });
   }
@@ -830,19 +871,17 @@ export class GameEngine {
               unit.miningTimer = MINING_TIME;
           } else {
               unit.x += (mineX > unit.x ? 1 : -1) * speed;
-              // Face direction
-              unit.rotation = 0; // Upright
+              unit.rotation = 0;
           }
       } else if (unit.state === UnitState.MINE_GATHERING) {
           if (unit.miningTimer && unit.miningTimer > 0) {
               unit.miningTimer--;
           } else {
               unit.state = UnitState.MINE_RETURN;
-              unit.goldCarrying = GOLD_PER_TRIP + (this.upgrades.minerSpeed * 1); // scaling gold
+              unit.goldCarrying = GOLD_PER_TRIP + (this.upgrades.minerSpeed * 1);
           }
       } else if (unit.state === UnitState.MINE_RETURN) {
            if (Math.abs(unit.x - base) < 5) {
-              // Deposit
               if (isPlayer) {
                   this.gold += (unit.goldCarrying || 0);
                   soundManager.playGold();
@@ -876,34 +915,29 @@ export class GameEngine {
       }
 
       const range = unit.stats.range;
-      const attackSpeed = Math.max(10, unit.stats.attackSpeed); // Frames per attack
+      const attackSpeed = Math.max(10, unit.stats.attackSpeed); 
 
       // State Logic
       if (target && distToTarget <= range) {
           unit.state = UnitState.ATTACK;
           unit.targetId = target.id;
           
-          // Attack Logic
           if (this.frame - unit.lastAttackFrame >= attackSpeed) {
-              // Trigger Attack
               unit.lastAttackFrame = this.frame;
-              
               if (unit.type === UnitType.ARCHER) {
                   this.fireArrow(unit, target);
               } else {
-                  // Melee Hit
                   target.stats.hp -= unit.stats.damage;
                   soundManager.playHit();
                   this.createParticles(target.x, target.y - 20, 3, '#ef4444');
                   if (target.stats.hp <= 0) {
-                      unit.targetId = null; // Clear target
+                      unit.targetId = null;
                       target.state = UnitState.DIE;
                       this.rewardKill(target);
                   }
               }
           }
       } else if (Math.abs(unit.x - enemyBaseX) <= range) {
-          // Attack Base
           unit.state = UnitState.ATTACK;
            if (this.frame - unit.lastAttackFrame >= attackSpeed) {
               unit.lastAttackFrame = this.frame;
@@ -917,162 +951,176 @@ export class GameEngine {
               }
            }
       } else {
-          // Move
-          unit.state = UnitState.MOVE;
+          // --- MOVEMENT LOGIC ---
           let moveDir = 0;
           
-          // Patrol / Rally Logic (Player only for now)
-          if (isPlayer && this.rallyPoint !== null) {
-              // If outside combat, move to rally point
-              if (Math.abs(unit.x - this.rallyPoint) > 5) {
-                  moveDir = this.rallyPoint > unit.x ? 1 : -1;
-              } else {
-                  unit.state = UnitState.IDLE;
-              }
+          // Player Logic
+          if (isPlayer) {
+              unit.state = UnitState.MOVE; // Default player state to MOVE unless overridden
               
-              // If Patrol Point Set
-              if (this.patrolPoint !== null) {
-                   // Patrol between rallyPoint (A) and patrolPoint (B)
-                   const ptA = this.rallyPoint;
-                   const ptB = this.patrolPoint;
-                   
-                   if (unit.patrolHeading === 'A') {
-                       if (Math.abs(unit.x - ptA) < 10) unit.patrolHeading = 'B';
-                       else moveDir = ptA > unit.x ? 1 : -1;
-                   } else {
-                       if (Math.abs(unit.x - ptB) < 10) unit.patrolHeading = 'A';
-                       else moveDir = ptB > unit.x ? 1 : -1;
-                   }
-                   unit.state = UnitState.MOVE;
+              // Priority 1: Vanguard Logic (Green Flag)
+              if (unit.isVanguard && this.vanguardPoint !== null) {
+                  if (Math.abs(unit.x - this.vanguardPoint) > 5) {
+                      moveDir = this.vanguardPoint > unit.x ? 1 : -1;
+                  } else {
+                      unit.state = UnitState.IDLE;
+                  }
               }
-
-          } else {
-              // Default Charge
-              moveDir = isPlayer ? 1 : -1;
+              // Priority 2: Rally Point (Blue Flag) - Default Main Force
+              else if (this.rallyPoint !== null) {
+                  if (Math.abs(unit.x - this.rallyPoint) > 5) {
+                      moveDir = this.rallyPoint > unit.x ? 1 : -1;
+                  } else {
+                      unit.state = UnitState.IDLE;
+                  }
+                  
+                  // Priority 3: Patrol (Red Flag)
+                  if (this.patrolPoint !== null && !unit.isVanguard) {
+                       const ptA = this.rallyPoint;
+                       const ptB = this.patrolPoint;
+                       if (unit.patrolHeading === 'A') {
+                           if (Math.abs(unit.x - ptA) < 10) unit.patrolHeading = 'B';
+                           else moveDir = ptA > unit.x ? 1 : -1;
+                       } else {
+                           if (Math.abs(unit.x - ptB) < 10) unit.patrolHeading = 'A';
+                           else moveDir = ptB > unit.x ? 1 : -1;
+                       }
+                       unit.state = UnitState.MOVE;
+                  }
+              } else {
+                  // Default Charge
+                  moveDir = 1;
+              }
+          } 
+          // AI Logic
+          else {
+              if (unit.state === UnitState.RETREAT) {
+                  // Retreating to towers
+                  const retreatTarget = ENEMY_BASE_X - TOWER_RANGE + 50; 
+                  if (unit.x > retreatTarget) moveDir = -1; // Move left (back to base)
+                  else unit.state = UnitState.IDLE; // Reached safety
+              } else {
+                  unit.state = UnitState.MOVE; // Default move if not retreating
+                  
+                  if (this.aiState === 'PROBE') {
+                      // Only specific units probe, others hold
+                      const isProbe = unit.type === UnitType.CAVALRY || unit.type === UnitType.SWORDMAN;
+                      if (isProbe && this.frame % 600 < 300) { // Probe periodically
+                           moveDir = -1; // Attack
+                      } else {
+                           // Hold near base/towers
+                           if (unit.x < ENEMY_BASE_X - 600) moveDir = 1; // Return
+                           else if (unit.x > ENEMY_BASE_X - 400) moveDir = -1; // Patrol out
+                           else unit.state = UnitState.IDLE;
+                      }
+                  } else {
+                      // Normal Attack
+                      moveDir = -1;
+                  }
+              }
           }
 
-          unit.x += moveDir * unit.stats.speed * speedMult;
+          if (unit.state === UnitState.MOVE || unit.state === UnitState.RETREAT) {
+              unit.x += moveDir * unit.stats.speed * speedMult;
+          }
       }
   }
 
-  fireArrow(shooter: Unit, target: Unit) {
-      const dx = target.x - shooter.x;
-      const dy = (target.y - 30) - (shooter.y - 30);
+  fireArrow(unit: Unit, target: Unit) {
+      const dx = target.x - unit.x;
+      const dy = (target.y - target.height/2) - (unit.y - unit.height/2);
       const dist = Math.sqrt(dx*dx + dy*dy);
-      
       const speed = 12;
-      const time = dist / speed;
       
-      const vx = (dx / time);
-      const vy = (dy - 0.5 * GRAVITY * time * time) / time; // Solve for initial vy
-
       this.projectiles.push({
           id: Math.random().toString(),
-          x: shooter.x,
-          y: shooter.y - 30,
-          vx: vx,
-          vy: vy,
-          startX: shooter.x,
-          damage: shooter.stats.damage,
-          faction: shooter.faction,
+          x: unit.x,
+          y: unit.y - 20,
+          vx: (dx / dist) * speed,
+          vy: (dy / dist) * speed - 2, // Slight arc
+          startX: unit.x,
+          damage: unit.stats.damage,
+          faction: unit.faction,
           active: true,
           type: 'ARROW',
-          rotation: Math.atan2(vy, vx)
+          rotation: Math.atan2(dy, dx)
       });
       soundManager.playAttack('ARCHER');
   }
 
-  fireArrowAtBase(shooter: Unit, baseX: number) {
-       const dx = baseX - shooter.x;
-       const dy = 0; 
-       const speed = 12;
-       const time = Math.abs(dx) / speed;
-       const vx = dx / time;
-       const vy = (dy - 0.5 * GRAVITY * time * time) / time;
-       
-       this.projectiles.push({
+  fireArrowAtBase(unit: Unit, targetX: number) {
+      const targetY = GROUND_Y - 50; // Aim at castle center roughly
+      const dx = targetX - unit.x;
+      const dy = targetY - (unit.y - unit.height/2);
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const speed = 12;
+
+      this.projectiles.push({
           id: Math.random().toString(),
-          x: shooter.x,
-          y: shooter.y - 30,
-          vx: vx,
-          vy: vy,
-          startX: shooter.x,
-          damage: shooter.stats.damage,
-          faction: shooter.faction,
+          x: unit.x,
+          y: unit.y - 20,
+          vx: (dx / dist) * speed,
+          vy: (dy / dist) * speed - 2,
+          startX: unit.x,
+          damage: unit.stats.damage,
+          faction: unit.faction,
           active: true,
           type: 'ARROW',
-          rotation: Math.atan2(vy, vx)
+          rotation: Math.atan2(dy, dx)
       });
       soundManager.playAttack('ARCHER');
   }
 
   updateProjectiles() {
-      this.projectiles = this.projectiles.filter(p => p.active);
-      
       this.projectiles.forEach(p => {
-          if (p.type === 'LIGHTNING_BOLT') {
-              if (!p['timer']) p['timer'] = 5;
-              p['timer']--;
-              if (p['timer'] <= 0) p.active = false;
-              return;
-          }
-
+          if (!p.active) return;
+          
           p.x += p.vx;
           p.y += p.vy;
           
-          if (p.type === 'ARROW') {
-              p.vy += GRAVITY;
-              p.rotation = Math.atan2(p.vy, p.vx);
+          if (p.type === 'ARROW' || p.type === 'TOWER_SHOT') {
+             p.vy += GRAVITY * 0.5; // Less gravity for arrows for better range feel
+             p.rotation = Math.atan2(p.vy, p.vx);
           }
 
-          // Ground Hit
-          if (p.y >= GROUND_Y) {
-              p.active = false;
-              this.createParticles(p.x, p.y, 2, '#9ca3af', false);
-              return;
-          }
-
-          // Out of bounds
-          if (p.x < 0 || p.x > WORLD_WIDTH) {
+          // Ground collision
+          if (p.y > GROUND_Y) {
               p.active = false;
               return;
           }
 
-          // Unit Hit Collision
-          const isPlayerProj = p.faction === Faction.PLAYER;
-          const targets = this.units.filter(u => 
-              u.faction !== p.faction && 
-              u.state !== UnitState.DIE && 
-              u.state !== UnitState.DEAD &&
-              Math.abs(u.x - p.x) < (u.width + 10) && 
-              Math.abs((u.y - u.height/2) - p.y) < u.height
-          );
-
-          if (targets.length > 0) {
-              const target = targets[0]; 
-              target.stats.hp -= p.damage;
-              soundManager.playHit();
-              this.createParticles(p.x, p.y, 3, '#ef4444');
-              p.active = false;
-              
-              if (target.stats.hp <= 0) {
-                  target.state = UnitState.DIE;
-                  this.rewardKill(target);
+          // Unit collision
+          // Optimization: Only check units of opposite faction
+          const targets = this.units.filter(u => u.faction !== p.faction && u.state !== UnitState.DIE && u.state !== UnitState.DEAD);
+          for (const u of targets) {
+              if (Math.abs(u.x - p.x) < u.width && Math.abs(u.y - u.height/2 - p.y) < u.height) {
+                  u.stats.hp -= p.damage;
+                  p.active = false;
+                  soundManager.playHit();
+                  this.createParticles(u.x, u.y - 20, 3, '#ef4444');
+                  
+                  if (u.stats.hp <= 0) {
+                      u.state = UnitState.DIE;
+                      this.rewardKill(u);
+                  }
+                  return;
               }
-              return;
           }
           
           // Base Collision
-          const enemyBaseX = isPlayerProj ? ENEMY_BASE_X : PLAYER_BASE_X;
-          if (Math.abs(p.x - enemyBaseX) < 50 && p.y > GROUND_Y - 100) {
-              if (isPlayerProj) this.enemyBaseHp -= p.damage;
-              else this.playerBaseHp -= p.damage;
-              
+          const isPlayer = p.faction === Faction.PLAYER;
+          const enemyBaseX = isPlayer ? ENEMY_BASE_X : PLAYER_BASE_X;
+          // Simple base collision: if projectile crosses base line
+          if ((isPlayer && p.x > enemyBaseX - 50) || (!isPlayer && p.x < enemyBaseX + 50)) {
               p.active = false;
+              if (isPlayer) this.enemyBaseHp -= p.damage;
+              else this.playerBaseHp -= p.damage;
               soundManager.playHit();
               return;
           }
       });
+      
+      this.projectiles = this.projectiles.filter(p => p.active);
   }
 
   updateParticles() {
@@ -1086,23 +1134,17 @@ export class GameEngine {
   }
 
   checkGameStatus() {
-      if (this.gameOver || this.victory) return;
-
       if (this.playerBaseHp <= 0) {
-          this.playerBaseHp = 0;
           this.gameOver = true;
-          this.started = false;
           soundManager.playDefeat();
           this.onStateChange(this);
       } else if (this.enemyBaseHp <= 0) {
-          this.enemyBaseHp = 0;
           this.victory = true;
-          this.started = false;
           soundManager.playVictory();
           this.onStateChange(this);
       }
   }
-  
+
   updateAI() {
      if (this.frame % 60 !== 0) return; // Tick once per second
 
@@ -1110,76 +1152,104 @@ export class GameEngine {
      const miners = activeUnits.filter(u => u.type === UnitType.MINER).length;
      const fighters = activeUnits.length - miners;
      const targetMiners = Math.min(6, 2 + Math.floor(this.level.level / 3));
+     const timeSeconds = this.levelTimer / 60;
 
-     // --- 1. INTELLIGENT DEFENSE (Anti-Cheese) ---
-     // If Player has units close to base OR base HP is low -> FORCE TOWER
-     const playerUnitsNear = this.units.some(u => u.faction === Faction.PLAYER && u.state !== UnitState.DEAD && u.x > ENEMY_BASE_X - 600);
-     const baseLow = this.enemyBaseHp < this.enemyMaxBaseHp * 0.75;
-     
-     if ((playerUnitsNear || baseLow) && this.enemyTowers < MAX_TOWERS) {
-         if (this.enemyGold >= TOWER_COST_BASE) {
+     // --- 1. CHEAT MECHANICS (Rubber Banding) ---
+     if (timeSeconds < 180 && this.enemyGold < 200 && miners < 4) {
+         this.enemyGold += 100; 
+     }
+
+     if (timeSeconds < 180) {
+         if (this.enemyBaseHp < this.enemyMaxBaseHp * 0.95 && this.enemyTowers < 2) {
+             if (this.enemyGold >= TOWER_COST_BASE) this.buyTower(Faction.ENEMY);
+             else this.enemyTowers++;
+         }
+     } else if (timeSeconds > 300) {
+         if (this.enemyTowers < 3 && this.enemyGold >= TOWER_COST_BASE) {
              this.buyTower(Faction.ENEMY);
          }
      }
 
-     // --- 2. ECONOMY PRIORITY ---
-     // AI must have at least 2 miners before thinking about attacking, unless absolutely desperate
-     if (miners < 2 && this.enemyGold >= UNIT_CONFIG[UnitType.MINER].cost) {
+     // --- 2. INTELLIGENCE (Counter-Play & Retreat) ---
+     const playerUnits = this.units.filter(u => u.faction === Faction.PLAYER && u.state !== UnitState.DEAD);
+     const pSwords = playerUnits.filter(u => u.type === UnitType.SWORDMAN).length;
+     const pArchers = playerUnits.filter(u => u.type === UnitType.ARCHER).length;
+     const pCavs = playerUnits.filter(u => u.type === UnitType.CAVALRY).length;
+     const pHeroes = playerUnits.filter(u => u.type === UnitType.HERO).length;
+     
+     // 2a. RETREAT LOGIC (Hit & Run)
+     // If army is weak and far from base, retreat to towers
+     const isArmyWeak = fighters < playerUnits.length * 0.5;
+     const isFarFromBase = activeUnits.some(u => u.x < ENEMY_BASE_X - 1000);
+     
+     if (isArmyWeak && isFarFromBase) {
+         this.aiState = 'RETREAT';
+         activeUnits.forEach(u => {
+             if (u.type !== UnitType.MINER && u.x < ENEMY_BASE_X - TOWER_RANGE) {
+                 u.state = UnitState.RETREAT;
+             }
+         });
+     } else if (this.aiState === 'RETREAT' && activeUnits.every(u => u.x >= ENEMY_BASE_X - TOWER_RANGE)) {
+         this.aiState = 'DEFEND'; // Reached safety
+     } else if (this.aiState === 'DEFEND' && fighters > playerUnits.length * 0.8) {
+         this.aiState = 'ATTACK'; // Counter attack
+     }
+
+     // 2b. PROBING (Instead of Force Attack)
+     // If no combat for a long time, send probing units
+     const lastEnemyAttack = Math.max(...activeUnits.map(u => u.lastAttackFrame), 0);
+     const timeSinceCombat = this.frame - lastEnemyAttack;
+     if (timeSinceCombat > 900 && this.aiState !== 'RETREAT') { // 15s no combat
+         this.aiState = 'PROBE';
+     }
+
+     // --- 3. SKILL USAGE (Defensive & Aggressive) ---
+     if (playerUnits.length > 0) {
+         const avgX = playerUnits.reduce((sum, u) => sum + u.x, 0) / playerUnits.length;
+         
+         // Arrow Rain on Vanguard
+         if (this.enemySkillCooldowns.ARROW_RAIN <= 0 && playerUnits.length >= 3) {
+             this.spawnArrowRain(avgX, Faction.ENEMY, this.enemyUpgrades.arrowRainPower);
+             this.enemySkillCooldowns.ARROW_RAIN = SKILL_COOLDOWNS_FRAMES.ARROW_RAIN;
+         }
+         
+         // Lightning on Heroes
+         if (this.enemySkillCooldowns.LIGHTNING <= 0) {
+             const target = playerUnits.find(u => u.type === UnitType.HERO) || playerUnits[0];
+             if (target) {
+                 this.spawnLightning(target.x, Faction.ENEMY, this.enemyUpgrades.lightningPower);
+                 this.enemySkillCooldowns.LIGHTNING = SKILL_COOLDOWNS_FRAMES.LIGHTNING;
+             }
+         }
+     }
+
+     // --- 4. ECONOMY ---
+     if (miners < targetMiners && this.enemyGold >= UNIT_CONFIG[UnitType.MINER].cost) {
          this.queueUnit(UnitType.MINER, Faction.ENEMY);
          return;
      }
 
-     // --- 3. MASSING LOGIC (The "Blob" Strategy) ---
-     // If the player has a small army (likely blocking), AI should save up to overwhelm
-     const playerArmyCount = this.units.filter(u => u.faction === Faction.PLAYER && u.type !== UnitType.MINER && u.state !== UnitState.DEAD).length;
-     
-     // Transition to MASSING if player is turtling with few units
-     if (this.aiState === 'ATTACK' && playerArmyCount < 3 && fighters < 2) {
-         this.aiState = 'MASSING';
-     }
-
-     // Transition back to ATTACK if rich enough or player army grows
-     if (this.aiState === 'MASSING') {
-         // Tier 1 Mass: 600G (Enough for ~3 Archers or Cavalry mix)
-         // Tier 2 Mass (Level 20+): 1500G
-         const massThreshold = this.level.level > 20 ? 1500 : 600;
-         
-         if (this.enemyGold >= massThreshold || playerArmyCount > 5 || playerUnitsNear) {
-             this.aiState = 'ATTACK';
-         } else {
-             // While massing, keep buying miners if needed
-             if (miners < targetMiners && this.enemyGold >= UNIT_CONFIG[UnitType.MINER].cost) {
-                 this.queueUnit(UnitType.MINER, Faction.ENEMY);
-             }
-             return; // Don't spend gold on units yet
+     if (this.level.level >= 20 && pHeroes > 0) {
+         const enemyHeroes = activeUnits.filter(u => u.type === UnitType.HERO).length;
+         if (enemyHeroes < pHeroes && this.enemyGold >= UNIT_CONFIG[UnitType.HERO].cost) {
+             this.queueUnit(UnitType.HERO, Faction.ENEMY);
+             return; 
          }
      }
 
-     // --- 4. ATTACK PHASE ---
-     if (this.aiState === 'ATTACK') {
-         // Economy Check: Maintain miners
-         if (miners < targetMiners && this.enemyGold >= UNIT_CONFIG[UnitType.MINER].cost) {
-             this.queueUnit(UnitType.MINER, Faction.ENEMY);
-             return;
-         }
-
-         // Unit Composition Logic
-         if (this.enemyGold > 100) {
+     if (this.enemyGold > 100) {
+         let buyType = UnitType.SWORDMAN;
+         if (pArchers > 3) buyType = UnitType.CAVALRY;
+         else if (pCavs > 3) buyType = UnitType.SWORDMAN; 
+         else if (pSwords > 3) buyType = UnitType.ARCHER;
+         else {
              const roll = Math.random();
-             // Adjust composition based on what the player is doing? (Future improvement)
-             // For now, balanced mix
-             
-             if (roll < 0.35 && this.enemyGold >= UNIT_CONFIG[UnitType.SWORDMAN].cost) {
-                 this.queueUnit(UnitType.SWORDMAN, Faction.ENEMY);
-             } else if (roll < 0.65 && this.enemyGold >= UNIT_CONFIG[UnitType.ARCHER].cost) {
-                 this.queueUnit(UnitType.ARCHER, Faction.ENEMY);
-             } else if (roll < 0.9 && this.enemyGold >= UNIT_CONFIG[UnitType.CAVALRY].cost) {
-                 this.queueUnit(UnitType.CAVALRY, Faction.ENEMY);
-             } else if (this.enemyGold >= UNIT_CONFIG[UnitType.HERO].cost) {
-                 const heroCount = activeUnits.filter(u => u.type === UnitType.HERO).length;
-                 if (heroCount < 3) this.queueUnit(UnitType.HERO, Faction.ENEMY);
-             }
+             if (roll < 0.4) buyType = UnitType.SWORDMAN;
+             else if (roll < 0.7) buyType = UnitType.ARCHER;
+             else buyType = UnitType.CAVALRY;
          }
+         if (this.enemyGold >= UNIT_CONFIG[buyType].cost) this.queueUnit(buyType, Faction.ENEMY);
+         else if (this.enemyGold >= UNIT_CONFIG[UnitType.SWORDMAN].cost) this.queueUnit(UnitType.SWORDMAN, Faction.ENEMY);
      }
   }
 
