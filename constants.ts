@@ -74,6 +74,36 @@ export const MINING_TIME = 60;
 export const GOLD_PER_TRIP = 25;
 export const INITIAL_GOLD = 200; 
 
+// --- STAT CALCULATION HELPER ---
+export const calculateUnitStats = (type: UnitType, upgradeLevel: number): UnitStats => {
+    const base = UNIT_CONFIG[type];
+    const stats = { ...base };
+
+    // Common Scaling: 5% per level for HP and Damage
+    const commonScale = 1 + (upgradeLevel * 0.05);
+
+    // Apply Common Scaling
+    stats.maxHp = Math.floor(base.maxHp * commonScale);
+    stats.hp = stats.maxHp;
+    stats.damage = Math.floor(base.damage * commonScale);
+
+    // Specific Logic
+    if (type === UnitType.ARCHER) {
+        // Archers gain 2% Attack Speed (Cooldown reduction) per level
+        // Cap at 60% reduction (0.4 multiplier)
+        const speedScale = Math.max(0.4, 1 - (upgradeLevel * 0.02));
+        stats.attackSpeed = Math.floor(base.attackSpeed * speedScale);
+    } else if (type === UnitType.MINER) {
+        // Miners gain Movement Speed
+        stats.speed = base.speed + (upgradeLevel * 0.1);
+    } else if (type === UnitType.HERO) {
+        // Hero gains EVERYTHING 5%
+        stats.speed = base.speed * commonScale;
+    }
+
+    return stats;
+};
+
 // Loop themes for 50 levels
 export const LEVEL_THEMES: LevelTheme[] = [
   { skyTop: '#38bdf8', skyBottom: '#bae6fd', mountainColor: '#64748b', groundColor: '#166534', nameEn: "Green Valley", nameVn: "Thung Lũng Xanh" },
@@ -141,17 +171,17 @@ export const TRANS = {
     income: "Thu Nhập",
     
     // Upgrades
-    upBaseHp: "Máu Nhà (+10%)",
-    upTower: "Sức Mạnh Tháp (+10%)",
-    upSword: "Sức Mạnh Kiếm (+10%)",
-    upArcher: "Sức Mạnh Nỏ (+10%)",
-    upCav: "Sức Mạnh Ngựa (+10%)",
-    upSpawn: "Tốc Độ Mua (-10%)",
-    upRain: "Sức Mạnh Mưa Tên",
-    upBolt: "Sức Mạnh Sấm Sét",
-    upFreeze: "Sức Mạnh Băng",
-    upHero: "Sức Mạnh Tướng (+5%)",
-    upMiner: "Kinh Tế (Đào/Vàng/Tốc)",
+    upBaseHp: "Lâu Đài",
+    upTower: "Tháp Canh",
+    upSword: "Lính Kiếm",
+    upArcher: "Cung Thủ",
+    upCav: "Kỵ Binh",
+    upSpawn: "Tốc Độ Mua",
+    upRain: "Mưa Tên",
+    upBolt: "Sấm Sét",
+    upFreeze: "Đóng Băng",
+    upHero: "Tướng Quân",
+    upMiner: "Thợ Mỏ",
 
     tip: "Mẹo: Dùng 'Tuần Tra' để lính tản ra, tránh bị Mưa Tên của địch!",
     exit: "Thoát"
@@ -198,17 +228,17 @@ export const TRANS = {
     income: "Income",
     
     // Upgrades
-    upBaseHp: "Base HP (+10%)",
-    upTower: "Tower Power (+10%)",
-    upSword: "Sword Power (+10%)",
-    upArcher: "Crossbow Power (+10%)",
-    upCav: "Cavalry Power (+10%)",
-    upSpawn: "Spawn Speed (-10%)",
-    upRain: "Arrow Rain DMG",
-    upBolt: "Lightning DMG",
-    upFreeze: "Freeze Power",
-    upHero: "Hero Power (+5%)",
-    upMiner: "Economy (Mine/Gold/Spd)",
+    upBaseHp: "Castle",
+    upTower: "Tower",
+    upSword: "Swordman",
+    upArcher: "Archer",
+    upCav: "Cavalry",
+    upSpawn: "Spawn Speed",
+    upRain: "Arrow Rain",
+    upBolt: "Lightning",
+    upFreeze: "Freeze",
+    upHero: "Champion",
+    upMiner: "Miner",
 
     tip: "Tip: Use 'Patrol' to spread your units and avoid enemy Arrow Rain!",
     exit: "Exit"

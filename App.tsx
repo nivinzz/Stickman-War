@@ -320,7 +320,10 @@ const App: React.FC = () => {
         <div className="text-center space-y-6 animate-fade-in">
           <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-500 mb-8">
             STICKMAN WAR
-            <span className="block text-2xl text-slate-400 font-normal mt-2">Mountain Defense</span>
+            <span className="block text-2xl text-slate-400 font-normal mt-2">
+                Mountain Defense 
+                <span className="text-sm text-slate-500 bg-slate-800 px-2 py-1 rounded-full ml-2 align-middle">v1.1</span>
+            </span>
           </h1>
           <button 
             onClick={() => setGameState('LEVEL_SELECT')}

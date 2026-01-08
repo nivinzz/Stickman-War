@@ -35,12 +35,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
               ctx.fillStyle = '#451a03';
               ctx.fillRect(-5, -40, 10, 40);
               
-              // Leaves
+              // Leaves (Improved)
               ctx.fillStyle = e.variant === 0 ? '#166534' : (e.variant === 1 ? '#15803d' : '#3f6212');
               ctx.beginPath();
-              ctx.arc(0, -50, 25, 0, Math.PI*2);
-              ctx.arc(-15, -40, 20, 0, Math.PI*2);
-              ctx.arc(15, -40, 20, 0, Math.PI*2);
+              ctx.moveTo(0, -60);
+              ctx.lineTo(25, -20);
+              ctx.lineTo(-25, -20);
+              ctx.fill();
+              ctx.beginPath();
+              ctx.moveTo(0, -45);
+              ctx.lineTo(20, -10);
+              ctx.lineTo(-20, -10);
               ctx.fill();
               
               ctx.restore();
@@ -105,13 +110,26 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
       });
   };
 
+  // --- VISUAL EVOLUTION LOGIC ---
+  const getUnitTier = (type: UnitType, faction: Faction) => {
+      const upgrades = faction === Faction.PLAYER ? engine.upgrades : engine.enemyUpgrades;
+      let level = 0;
+      if (type === UnitType.SWORDMAN) level = upgrades.swordDamage;
+      if (type === UnitType.ARCHER) level = upgrades.archerDamage;
+      if (type === UnitType.CAVALRY) level = upgrades.cavalryDamage;
+      if (type === UnitType.HERO) level = upgrades.heroPower;
+      
+      return Math.floor(level / 10); // Tier 0 (0-9), Tier 1 (10-19), Tier 2 (20+)
+  };
+
   const drawStickman = (ctx: CanvasRenderingContext2D, unit: Unit) => {
     // Fog of War Check
     if (unit.faction === Faction.ENEMY && unit.x > engine.playerVisibleX) {
-        return; // Don't draw enemy if beyond player vision
+        return; 
     }
 
     const isPlayer = unit.faction === Faction.PLAYER;
+    const tier = getUnitTier(unit.type, unit.faction);
     const color = isPlayer ? '#4ade80' : '#f87171';
     const height = unit.height;
     
@@ -132,7 +150,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
     // --- LEGS ---
     if (unit.type === UnitType.CAVALRY) {
         ctx.save();
-        ctx.strokeStyle = '#a8a29e'; 
+        ctx.strokeStyle = tier > 0 ? '#d6d3d1' : '#a8a29e'; // Silver armor for horse at T1
+        if (tier > 1) ctx.strokeStyle = '#facc15'; // Gold for T2
         ctx.lineWidth = 3;
         ctx.beginPath(); ctx.moveTo(-15, -20); ctx.lineTo(15, -20); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(15, -20); ctx.lineTo(25, -30); ctx.lineTo(20, -15); ctx.stroke();
@@ -151,6 +170,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
     ctx.moveTo(0, -15); ctx.lineTo(5 - legSwing, 0); ctx.stroke();
 
     // --- BODY & HEAD ---
+    // Cape for Tier 2 Units
+    if (tier >= 2 && (unit.type === UnitType.SWORDMAN || unit.type === UnitType.HERO || unit.type === UnitType.CAVALRY)) {
+        ctx.save();
+        ctx.fillStyle = isPlayer ? '#1e40af' : '#7f1d1d';
+        ctx.beginPath();
+        ctx.moveTo(-5, -height + 5);
+        ctx.lineTo(-15 + (Math.sin(unit.animationFrame * 0.2) * 5), -5);
+        ctx.lineTo(5, -height + 5);
+        ctx.fill();
+        ctx.restore();
+    }
+
     ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(0, -height + 8); ctx.stroke();
     ctx.beginPath(); ctx.arc(0, -height, 8, 0, Math.PI * 2); ctx.fill();
 
@@ -161,6 +192,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
         ctx.translate(5, -height + 25);
         ctx.fillStyle = isPlayer ? '#1e293b' : '#450a0a';
         ctx.strokeStyle = '#94a3b8';
+        if (tier > 0) ctx.strokeStyle = '#cbd5e1'; // Lighter shield T1
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(-5, -10);
@@ -170,6 +202,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
+        
+        if (tier >= 2) { // Gold Trim
+             ctx.strokeStyle = '#facc15';
+             ctx.stroke();
+        }
         ctx.restore();
     }
 
@@ -177,17 +214,16 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
     const isAttacking = unit.state === UnitState.ATTACK;
     const attackPhase = Math.sin(unit.animationFrame * 0.5); 
     
-    let armAngle = Math.PI/6; // Default arm angle (downwards)
-    let shoulderY = -height + 15; // Default shoulder height
+    let armAngle = Math.PI/6; 
+    let shoulderY = -height + 15; 
 
-    // Raise Crossbowman arm to eye level and point straight
     if (unit.type === UnitType.ARCHER) {
-        shoulderY = -height + 6; // Near head
-        armAngle = Math.PI / 2; // Horizontal (Straight forward)
+        shoulderY = -height + 6; 
+        armAngle = Math.PI / 2; 
     } 
     else if (isAttacking) {
         if (unit.type === UnitType.SWORDMAN || unit.type === UnitType.HERO) {
-            const phaseNormalized = (attackPhase + 1) / 2; // 0 to 1
+            const phaseNormalized = (attackPhase + 1) / 2; 
             armAngle = -Math.PI * 0.8 + (phaseNormalized * Math.PI); 
         } else if (unit.type === UnitType.CAVALRY) {
              armAngle = 0;
@@ -216,7 +252,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
     }
 
     // --- WEAPON RENDERING ---
-    // Weapon Pivot Position
     const weaponX = handX + thrustX;
     const weaponY = shoulderY + handY;
 
@@ -225,7 +260,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
         const chop = Math.abs(Math.sin(unit.animationFrame * 0.2));
         ctx.rotate(unit.state === UnitState.MINE_GATHERING ? -chop : 0);
         ctx.strokeStyle = '#9ca3af'; ctx.beginPath(); ctx.moveTo(0, 5); ctx.lineTo(0, -10); ctx.stroke(); 
-        ctx.strokeStyle = '#eab308'; ctx.beginPath(); ctx.moveTo(-5, -10); ctx.lineTo(5, -8); ctx.stroke(); 
+        ctx.strokeStyle = tier > 0 ? '#3b82f6' : '#eab308'; // Diamond pickaxe at T1
+        ctx.beginPath(); ctx.moveTo(-5, -10); ctx.lineTo(5, -8); ctx.stroke(); 
         ctx.restore();
     } 
     else if (unit.type === UnitType.SWORDMAN || unit.type === UnitType.HERO) {
@@ -233,59 +269,60 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
         ctx.translate(weaponX, weaponY); 
         ctx.rotate(armAngle); 
         
+        // Blade Color
         ctx.fillStyle = '#94a3b8'; 
+        if (tier === 1) ctx.fillStyle = '#e2e8f0'; // Shiny Steel
+        if (tier >= 2 || unit.type === UnitType.HERO) ctx.fillStyle = '#facc15'; // Gold
+        
         ctx.beginPath();
-        ctx.moveTo(-2, -5); 
-        ctx.lineTo(-2, -35); 
-        ctx.lineTo(0, -40); 
-        ctx.lineTo(2, -35); 
-        ctx.lineTo(2, -5); 
+        // Bigger sword for T2 or Hero
+        const wScale = (tier >= 2 || unit.type === UnitType.HERO) ? 1.5 : 1;
+        
+        ctx.moveTo(-2 * wScale, -5); 
+        ctx.lineTo(-2 * wScale, -35 * wScale); 
+        ctx.lineTo(0, -40 * wScale); 
+        ctx.lineTo(2 * wScale, -35 * wScale); 
+        ctx.lineTo(2 * wScale, -5); 
         ctx.fill();
         
         ctx.fillStyle = '#b45309'; 
-        ctx.fillRect(-6, -5, 12, 3); 
-        ctx.fillRect(-2, -2, 4, 8); 
+        ctx.fillRect(-6 * wScale, -5, 12 * wScale, 3); 
+        ctx.fillRect(-2 * wScale, -2, 4 * wScale, 8); 
         ctx.restore();
     } 
     else if (unit.type === UnitType.CAVALRY) {
         ctx.save(); ctx.translate(weaponX, weaponY);
         ctx.strokeStyle = '#d1d5db'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(40, -2); ctx.stroke(); 
-        ctx.strokeStyle = '#991b1b'; ctx.beginPath(); ctx.moveTo(35, -2); ctx.lineTo(40, -2); ctx.stroke(); 
+        // Lance Tip
+        ctx.strokeStyle = tier >= 2 ? '#facc15' : '#991b1b'; 
+        ctx.beginPath(); ctx.moveTo(35, -2); ctx.lineTo(40, -2); ctx.stroke(); 
         ctx.restore();
     } 
     else if (unit.type === UnitType.ARCHER) {
-        // CROSSBOW RENDER
         ctx.save(); 
         ctx.translate(weaponX + 5, weaponY); 
         
-        // Stock (Wooden part)
         ctx.fillStyle = '#78350f';
         ctx.fillRect(-5, -2, 20, 4);
         
-        // Bow (Metal part, perpendicular)
-        ctx.strokeStyle = '#a16207';
+        ctx.strokeStyle = tier >= 2 ? '#facc15' : '#a16207'; // Gold Bow T2
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(10, -10);
         ctx.quadraticCurveTo(8, 0, 10, 10);
         ctx.stroke();
         
-        // String
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 1;
         ctx.beginPath();
         if (isAttacking) {
-             // Released string
              ctx.moveTo(10, -10); ctx.lineTo(10, 10);
         } else {
-             // Pulled string
              ctx.moveTo(10, -10); ctx.lineTo(0, 0); ctx.lineTo(10, 10);
-             // Bolt loaded
              ctx.strokeStyle = '#000';
              ctx.moveTo(0, 0); ctx.lineTo(12, 0);
         }
         ctx.stroke();
-
         ctx.restore();
     }
 
@@ -296,20 +333,39 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
     }
     
     if (unit.type === UnitType.MINER) {
-        ctx.fillStyle = '#facc15'; ctx.beginPath(); ctx.arc(0, -height - 2, 9, Math.PI, 0); ctx.fill();
+        ctx.fillStyle = tier > 0 ? '#3b82f6' : '#facc15'; ctx.beginPath(); ctx.arc(0, -height - 2, 9, Math.PI, 0); ctx.fill();
+        if (tier > 0) { // Mining Light
+            ctx.fillStyle = '#fef08a'; ctx.beginPath(); ctx.arc(4, -height - 2, 3, 0, Math.PI*2); ctx.fill();
+        }
     } else if (unit.type === UnitType.SWORDMAN) {
         ctx.fillStyle = '#64748b'; 
+        if (tier >= 1) ctx.fillStyle = '#94a3b8'; // Iron Helm
+        if (tier >= 2) ctx.fillStyle = '#facc15'; // Gold Helm
+        
         ctx.beginPath();
         ctx.moveTo(-8, -height);
         ctx.lineTo(-8, -height - 8);
         ctx.quadraticCurveTo(0, -height - 12, 8, -height - 8);
         ctx.lineTo(8, -height);
         ctx.fill();
+        
+        // Plume for T2
+        if (tier >= 2) {
+             ctx.fillStyle = isPlayer ? '#2563eb' : '#dc2626';
+             ctx.beginPath(); ctx.moveTo(0, -height-12); ctx.quadraticCurveTo(10, -height-20, 15, -height-5); ctx.fill();
+        }
+
     } else if (unit.type === UnitType.ARCHER) {
-        // Crossbowman Hat (Flat cap)
-        ctx.fillStyle = '#3f6212'; // Dark green
-        ctx.fillRect(-6, -height - 4, 12, 4);
-        ctx.beginPath(); ctx.moveTo(-6, -height); ctx.lineTo(8, -height); ctx.lineTo(6, -height+2); ctx.lineTo(-6, -height+2); ctx.fill();
+        if (tier >= 1) {
+            // Hood
+            ctx.fillStyle = '#166534';
+            ctx.beginPath(); ctx.arc(0, -height, 10, Math.PI, 0); ctx.fill();
+            ctx.lineTo(10, -height+5); ctx.lineTo(-10, -height+5); ctx.fill();
+        } else {
+            ctx.fillStyle = '#3f6212'; 
+            ctx.fillRect(-6, -height - 4, 12, 4);
+            ctx.beginPath(); ctx.moveTo(-6, -height); ctx.lineTo(8, -height); ctx.lineTo(6, -height+2); ctx.lineTo(-6, -height+2); ctx.fill();
+        }
     }
 
     if (unit.stats.hp < unit.stats.maxHp) {
@@ -321,6 +377,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
     ctx.restore();
   };
 
+  // ... (Keep drawCastle and drawFogOfWar same) ...
   const drawCastle = (ctx: CanvasRenderingContext2D, x: number, y: number, isPlayer: boolean) => {
       // Fog of War Check
       if (!isPlayer && x > engine.playerVisibleX + 50) { 
@@ -457,6 +514,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
       }
   };
 
+
   const drawBackground = (ctx: CanvasRenderingContext2D) => {
     const grad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
     grad.addColorStop(0, theme.skyTop);
@@ -466,15 +524,32 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
 
     drawSkyElements(ctx);
 
+    // --- SMOOTH MOUNTAINS ---
     ctx.fillStyle = theme.mountainColor;
-    ctx.beginPath(); ctx.moveTo(0, GROUND_Y); 
-    // Random mountains
-    ctx.lineTo(400, 200); ctx.lineTo(800, GROUND_Y); ctx.lineTo(1200, 250);
-    ctx.lineTo(1600, GROUND_Y); ctx.lineTo(2000, 150); ctx.lineTo(2500, GROUND_Y); ctx.lineTo(3000, 300);
-    ctx.lineTo(WORLD_WIDTH, GROUND_Y); ctx.fill();
+    ctx.beginPath(); 
+    ctx.moveTo(0, GROUND_Y);
+    
+    // Draw curves for mountains
+    // Control points randomly adjusted for variety but deterministic enough for "static" look per render
+    ctx.bezierCurveTo(300, 100, 500, 300, 800, GROUND_Y);
+    ctx.bezierCurveTo(1100, 50, 1300, 400, 1600, GROUND_Y);
+    ctx.bezierCurveTo(1900, 150, 2200, 300, 2400, GROUND_Y);
+    ctx.bezierCurveTo(2600, 200, 2800, 350, WORLD_WIDTH, GROUND_Y);
+    
+    ctx.lineTo(WORLD_WIDTH, CANVAS_HEIGHT);
+    ctx.lineTo(0, CANVAS_HEIGHT);
+    ctx.fill();
 
+    // --- BETTER GROUND ---
     ctx.fillStyle = theme.groundColor;
     ctx.fillRect(0, GROUND_Y, WORLD_WIDTH, CANVAS_HEIGHT - GROUND_Y);
+    
+    // Grass Texture
+    ctx.fillStyle = 'rgba(0,0,0,0.1)';
+    for(let i=0; i<WORLD_WIDTH; i+=20) {
+        if(i % 60 === 0) ctx.fillRect(i, GROUND_Y, 2, 5); // Tall grass
+        else ctx.fillRect(i, GROUND_Y, 2, 2); // Short grass
+    }
 
     drawEnvironment(ctx);
     drawHazards(ctx); 
