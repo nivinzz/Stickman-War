@@ -75,21 +75,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
        });
   };
 
-  const drawFlag = (ctx: CanvasRenderingContext2D, x: number, color: 'RED' | 'BLUE' | 'GREEN') => {
+  const drawFlag = (ctx: CanvasRenderingContext2D, x: number, isRed: boolean = false) => {
       ctx.save();
       ctx.translate(x, GROUND_Y);
-      
-      const strokeColor = color === 'RED' ? 'rgba(239, 68, 68, 0.5)' : (color === 'BLUE' ? 'rgba(59, 130, 246, 0.5)' : 'rgba(34, 197, 94, 0.5)');
-      const fillColor = color === 'RED' ? '#ef4444' : (color === 'BLUE' ? '#3b82f6' : '#22c55e');
       
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 3;
       ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -60); ctx.stroke();
 
-      ctx.fillStyle = fillColor; 
+      ctx.fillStyle = isRed ? '#ef4444' : '#3b82f6'; 
       ctx.beginPath(); ctx.moveTo(0, -60); ctx.lineTo(25, -45); ctx.lineTo(0, -30); ctx.fill();
 
-      ctx.strokeStyle = strokeColor;
+      ctx.strokeStyle = isRed ? 'rgba(239, 68, 68, 0.5)' : 'rgba(59, 130, 246, 0.5)';
       ctx.beginPath(); ctx.ellipse(0, 0, 15, 5, 0, 0, Math.PI * 2); ctx.stroke();
       
       ctx.restore();
@@ -148,12 +145,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
 
     if (!isPlayer) {
         ctx.scale(-1, 1);
-    }
-    
-    // Vanguard Indicator (Green Shield)
-    if (unit.isVanguard) {
-        ctx.fillStyle = 'rgba(34, 197, 94, 0.3)';
-        ctx.beginPath(); ctx.arc(0, -height/2, 20, 0, Math.PI*2); ctx.fill();
     }
 
     const isAttacking = unit.state === UnitState.ATTACK;
@@ -622,19 +613,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
     drawMine(PLAYER_BASE_X + MINING_DISTANCE, Faction.PLAYER);
     drawMine(ENEMY_BASE_X - MINING_DISTANCE, Faction.ENEMY);
 
-    // Rally Point Flag (Blue - Main)
+    // Rally Point Flag (Blue)
     if (engine.rallyPoint !== null) {
-        drawFlag(ctx, engine.rallyPoint, 'BLUE');
+        drawFlag(ctx, engine.rallyPoint, false);
     }
     
     // Patrol Point Flag (Red)
     if (engine.patrolPoint !== null) {
-        drawFlag(ctx, engine.patrolPoint, 'RED');
-    }
-
-    // Vanguard Point Flag (Green)
-    if (engine.vanguardPoint !== null) {
-        drawFlag(ctx, engine.vanguardPoint, 'GREEN');
+        drawFlag(ctx, engine.patrolPoint, true);
     }
 
     const pPct = Math.max(0, engine.playerBaseHp / engine.playerMaxBaseHp);
@@ -764,17 +750,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
       
       // Patrol Flag Reticle
       if (targetingSkill === 'SET_PATROL') {
-          drawFlag(ctx, hoverX, 'RED'); 
-      }
-      
-      // Vanguard Flag Reticle
-      if (targetingSkill === 'SET_VANGUARD') {
-          drawFlag(ctx, hoverX, 'GREEN');
-      }
-
-      // Rally Flag Reticle (Main)
-      if (targetingSkill === 'SET_RALLY') {
-          drawFlag(ctx, hoverX, 'BLUE');
+          drawFlag(ctx, hoverX, true); // Ghost red flag
       }
       
       ctx.restore(); 
@@ -833,12 +809,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
     } else if (targetingSkill === 'SET_PATROL') {
         engine.setPatrolPoint(clickX);
         onSkillUsed();
-    } else if (targetingSkill === 'SET_VANGUARD') {
-        engine.setVanguardPoint(clickX);
-        onSkillUsed();
-    } else if (targetingSkill === 'SET_RALLY') {
-        engine.setRallyPoint(clickX);
-        onSkillUsed();
+    } else {
+        if (mouseCanvasY > 350) {
+            engine.setRallyPoint(clickX);
+        }
     }
   };
 
