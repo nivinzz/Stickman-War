@@ -1203,23 +1203,31 @@ export class GameEngine {
          this.aiState = 'PROBE';
      }
 
-     // --- 3. SKILL USAGE (Defensive & Aggressive) ---
-     if (playerUnits.length > 0) {
-         const avgX = playerUnits.reduce((sum, u) => sum + u.x, 0) / playerUnits.length;
+     // --- 3. SKILL USAGE (Defensive & Aggressive - STRICT VISION CHECK) ---
+     const visiblePlayerUnits = playerUnits.filter(u => u.x >= this.enemyVisibleX);
+
+     if (visiblePlayerUnits.length > 0) {
+         const avgX = visiblePlayerUnits.reduce((sum, u) => sum + u.x, 0) / visiblePlayerUnits.length;
          
          // Arrow Rain on Vanguard
-         if (this.enemySkillCooldowns.ARROW_RAIN <= 0 && playerUnits.length >= 3) {
+         if (this.enemySkillCooldowns.ARROW_RAIN <= 0 && visiblePlayerUnits.length >= 3) {
              this.spawnArrowRain(avgX, Faction.ENEMY, this.enemyUpgrades.arrowRainPower);
              this.enemySkillCooldowns.ARROW_RAIN = SKILL_COOLDOWNS_FRAMES.ARROW_RAIN;
          }
          
          // Lightning on Heroes
          if (this.enemySkillCooldowns.LIGHTNING <= 0) {
-             const target = playerUnits.find(u => u.type === UnitType.HERO) || playerUnits[0];
+             const target = visiblePlayerUnits.find(u => u.type === UnitType.HERO) || visiblePlayerUnits[0];
              if (target) {
                  this.spawnLightning(target.x, Faction.ENEMY, this.enemyUpgrades.lightningPower);
                  this.enemySkillCooldowns.LIGHTNING = SKILL_COOLDOWNS_FRAMES.LIGHTNING;
              }
+         }
+
+         // Freeze if visible and threatening
+         if (this.enemySkillCooldowns.FREEZE <= 0 && avgX > ENEMY_BASE_X - 600) {
+             this.spawnFreeze(avgX, Faction.ENEMY, this.enemyUpgrades.freezePower);
+             this.enemySkillCooldowns.FREEZE = SKILL_COOLDOWNS_FRAMES.FREEZE;
          }
      }
 
