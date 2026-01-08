@@ -135,85 +135,105 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
     
     ctx.save();
     ctx.translate(unit.x, unit.y);
-    ctx.rotate(unit.rotation); 
+    
+    // Rotation (For Death Animation)
+    // If unit is dying, rotation is applied in Engine. 
+    // We pivot around the feet (0,0) so they fall backward
+    ctx.rotate(isPlayer ? -unit.rotation : unit.rotation);
+
     ctx.globalAlpha = unit.opacity;
 
     if (!isPlayer) {
         ctx.scale(-1, 1);
     }
 
+    const isAttacking = unit.state === UnitState.ATTACK;
+    const attackPhase = Math.sin(unit.animationFrame * 0.5); 
+    const walkCycle = Math.sin(unit.animationFrame * 0.3) * 8;
+    const legSwing = (unit.state === UnitState.MOVE || unit.state === UnitState.MINE_WALK_TO_MINE || unit.state === UnitState.MINE_RETURN) ? walkCycle : 0;
+
+    // --- CAVALRY RENDER (COMPLETELY REDONE) ---
+    if (unit.type === UnitType.CAVALRY) {
+        // Colors
+        const horseColor = tier === 0 ? '#78350f' : (tier === 1 ? '#57534e' : '#fefce8'); // Brown -> Grey -> White/Goldish
+        const horseArmor = tier === 0 ? null : (tier === 1 ? '#94a3b8' : '#fbbf24'); // None -> Iron -> Gold
+        
+        // 1. Back Legs
+        ctx.fillStyle = horseColor;
+        ctx.beginPath(); ctx.moveTo(-10, -20); ctx.lineTo(-15 + legSwing, 0); ctx.lineTo(-10 + legSwing, 0); ctx.lineTo(-5, -20); ctx.fill();
+
+        // 2. Horse Body
+        ctx.beginPath(); ctx.ellipse(0, -30, 20, 12, 0, 0, Math.PI * 2); ctx.fill();
+        
+        // Armor Blanket
+        if (tier >= 1) {
+             ctx.fillStyle = isPlayer ? '#1e40af' : '#991b1b';
+             ctx.fillRect(-10, -35, 20, 10);
+        }
+
+        // 3. Front Legs
+        ctx.fillStyle = horseColor;
+        ctx.beginPath(); ctx.moveTo(10, -25); ctx.lineTo(15 - legSwing, 0); ctx.lineTo(20 - legSwing, 0); ctx.lineTo(15, -25); ctx.fill();
+
+        // 4. Neck & Head
+        ctx.save();
+        ctx.translate(15, -35);
+        ctx.rotate(-Math.PI / 4);
+        ctx.fillStyle = horseColor;
+        ctx.fillRect(0, -15, 12, 25); // Neck
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(25, -50);
+        ctx.fillStyle = horseColor;
+        ctx.beginPath(); ctx.ellipse(0, 0, 8, 5, 0, 0, Math.PI*2); ctx.fill(); // Head
+        
+        // Horse Helmet
+        if (horseArmor) {
+            ctx.fillStyle = horseArmor;
+            ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(5, 0); ctx.lineTo(0, 5); ctx.fill();
+        }
+        ctx.restore();
+
+        // 5. Rider (Stickman sitting)
+        ctx.translate(-5, -20); // Sit offset
+        // Adjust height for visual balance
+    }
+
+    // --- COMMON STICKMAN BODY ---
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
     ctx.lineWidth = 2;
     if (unit.type === UnitType.HERO) ctx.lineWidth = 3;
 
-    // --- LEGS ---
-    if (unit.type === UnitType.CAVALRY) {
-        ctx.save();
-        ctx.strokeStyle = tier > 0 ? '#d6d3d1' : '#a8a29e'; // Silver armor for horse at T1
-        if (tier > 1) ctx.strokeStyle = '#facc15'; // Gold for T2
-        ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.moveTo(-15, -20); ctx.lineTo(15, -20); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(15, -20); ctx.lineTo(25, -30); ctx.lineTo(20, -15); ctx.stroke();
-        const legOffset = Math.sin(unit.animationFrame * 0.5) * 10;
-        ctx.beginPath(); ctx.moveTo(-15, -20); ctx.lineTo(-20 + legOffset, 0); 
-        ctx.moveTo(15, -20); ctx.lineTo(20 - legOffset, 0); 
-        ctx.stroke();
-        ctx.restore();
-        ctx.translate(0, -15); 
+    // Legs (If not cavalry)
+    if (unit.type !== UnitType.CAVALRY) {
+        ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(-5 + legSwing, 0); 
+        ctx.moveTo(0, -15); ctx.lineTo(5 - legSwing, 0); ctx.stroke();
+    } else {
+        // Rider Leg
+        ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(5, -5); ctx.stroke();
     }
 
-    const legSwing = (unit.state === UnitState.MOVE || unit.state === UnitState.MINE_WALK_TO_MINE || unit.state === UnitState.MINE_RETURN)
-        ? Math.sin(unit.animationFrame * 0.3) * 8 : 0;
-    
-    ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(-5 + legSwing, 0); 
-    ctx.moveTo(0, -15); ctx.lineTo(5 - legSwing, 0); ctx.stroke();
-
-    // --- BODY & HEAD ---
-    // Cape for Tier 2 Units
-    if (tier >= 2 && (unit.type === UnitType.SWORDMAN || unit.type === UnitType.HERO || unit.type === UnitType.CAVALRY)) {
-        ctx.save();
-        ctx.fillStyle = isPlayer ? '#1e40af' : '#7f1d1d';
-        ctx.beginPath();
-        ctx.moveTo(-5, -height + 5);
-        ctx.lineTo(-15 + (Math.sin(unit.animationFrame * 0.2) * 5), -5);
-        ctx.lineTo(5, -height + 5);
-        ctx.fill();
-        ctx.restore();
-    }
-
+    // Body
     ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(0, -height + 8); ctx.stroke();
+    
+    // Head
     ctx.beginPath(); ctx.arc(0, -height, 8, 0, Math.PI * 2); ctx.fill();
 
-    // --- SPECIAL UNIT VISUALS ---
-    
-    if (unit.type === UnitType.SWORDMAN) {
+    // Cape (Tier 2 or Hero)
+    if ((tier >= 2 || unit.type === UnitType.HERO) && unit.type !== UnitType.MINER) {
         ctx.save();
-        ctx.translate(5, -height + 25);
-        ctx.fillStyle = isPlayer ? '#1e293b' : '#450a0a';
-        ctx.strokeStyle = '#94a3b8';
-        if (tier > 0) ctx.strokeStyle = '#cbd5e1'; // Lighter shield T1
-        ctx.lineWidth = 2;
+        ctx.fillStyle = isPlayer ? '#1d4ed8' : '#b91c1c'; // Blue or Red Cape
         ctx.beginPath();
-        ctx.moveTo(-5, -10);
-        ctx.lineTo(5, -10);
-        ctx.lineTo(5, 0);
-        ctx.quadraticCurveTo(0, 10, -5, 0);
-        ctx.closePath();
+        ctx.moveTo(-2, -height + 5);
+        ctx.quadraticCurveTo(-15, -height + 15, -15 + (Math.sin(unit.animationFrame * 0.2) * 3), -5);
+        ctx.lineTo(2, -height + 5);
         ctx.fill();
-        ctx.stroke();
-        
-        if (tier >= 2) { // Gold Trim
-             ctx.strokeStyle = '#facc15';
-             ctx.stroke();
-        }
         ctx.restore();
     }
 
     // --- ARMS & WEAPONS ---
-    const isAttacking = unit.state === UnitState.ATTACK;
-    const attackPhase = Math.sin(unit.animationFrame * 0.5); 
-    
     let armAngle = Math.PI/6; 
     let shoulderY = -height + 15; 
 
@@ -226,7 +246,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
             const phaseNormalized = (attackPhase + 1) / 2; 
             armAngle = -Math.PI * 0.8 + (phaseNormalized * Math.PI); 
         } else if (unit.type === UnitType.CAVALRY) {
-             armAngle = 0;
+             // Lancing motion
+             armAngle = 0; 
         }
     }
 
@@ -244,134 +265,157 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
     ctx.lineTo(handX + thrustX, shoulderY + handY);
     ctx.stroke();
 
-    // Accessories
-    if (unit.type === UnitType.HERO) {
-        ctx.fillStyle = '#dc2626'; ctx.beginPath(); ctx.moveTo(-2, -height + 10);
-        const wave = Math.sin(unit.animationFrame * 0.2) * 5;
-        ctx.lineTo(-20, -10 + wave); ctx.lineTo(-20, -30 + wave); ctx.lineTo(-2, -height + 8); ctx.fill();
-    }
-
-    // --- WEAPON RENDERING ---
     const weaponX = handX + thrustX;
     const weaponY = shoulderY + handY;
 
+    // --- WEAPON & GEAR RENDERING BASED ON TIER ---
+
+    // 1. MINER
     if (unit.type === UnitType.MINER) {
         ctx.save(); ctx.translate(weaponX, weaponY);
         const chop = Math.abs(Math.sin(unit.animationFrame * 0.2));
         ctx.rotate(unit.state === UnitState.MINE_GATHERING ? -chop : 0);
         ctx.strokeStyle = '#9ca3af'; ctx.beginPath(); ctx.moveTo(0, 5); ctx.lineTo(0, -10); ctx.stroke(); 
-        ctx.strokeStyle = tier > 0 ? '#3b82f6' : '#eab308'; // Diamond pickaxe at T1
+        ctx.strokeStyle = tier > 0 ? '#3b82f6' : '#eab308'; // Diamond vs Gold
         ctx.beginPath(); ctx.moveTo(-5, -10); ctx.lineTo(5, -8); ctx.stroke(); 
+        
+        // Helmet
         ctx.restore();
+        ctx.fillStyle = tier > 0 ? '#3b82f6' : '#facc15'; ctx.beginPath(); ctx.arc(0, -height - 2, 9, Math.PI, 0); ctx.fill();
+        // Light
+        ctx.fillStyle = '#fef08a'; ctx.beginPath(); ctx.arc(4, -height - 2, 3, 0, Math.PI*2); ctx.fill();
     } 
+    
+    // 2. SWORDMAN & HERO
     else if (unit.type === UnitType.SWORDMAN || unit.type === UnitType.HERO) {
+        // Shield
+        ctx.save();
+        ctx.translate(5, -height + 25);
+        ctx.fillStyle = isPlayer ? '#1e293b' : '#450a0a'; // Dark faction color
+        ctx.strokeStyle = tier >= 1 ? '#cbd5e1' : '#94a3b8'; // Iron rim
+        if (tier >= 2 || unit.type === UnitType.HERO) ctx.strokeStyle = '#facc15'; // Gold rim
+        
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        if (tier === 0) {
+            // Round buckler
+            ctx.arc(0, 0, 8, 0, Math.PI*2);
+        } else {
+            // Kite shield
+            ctx.moveTo(-6, -10); ctx.lineTo(6, -10); ctx.lineTo(6, 0); ctx.quadraticCurveTo(0, 12, -6, 0);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        // Sword
         ctx.save(); 
         ctx.translate(weaponX, weaponY); 
         ctx.rotate(armAngle); 
         
-        // Blade Color
-        ctx.fillStyle = '#94a3b8'; 
-        if (tier === 1) ctx.fillStyle = '#e2e8f0'; // Shiny Steel
-        if (tier >= 2 || unit.type === UnitType.HERO) ctx.fillStyle = '#facc15'; // Gold
-        
+        ctx.fillStyle = tier === 0 ? '#94a3b8' : (tier === 1 ? '#e2e8f0' : '#facc15'); // Stone -> Steel -> Gold
+        if (unit.type === UnitType.HERO) ctx.fillStyle = '#facc15';
+
+        const swordLen = (tier >= 2 || unit.type === UnitType.HERO) ? 1.4 : 1;
         ctx.beginPath();
-        // Bigger sword for T2 or Hero
-        const wScale = (tier >= 2 || unit.type === UnitType.HERO) ? 1.5 : 1;
-        
-        ctx.moveTo(-2 * wScale, -5); 
-        ctx.lineTo(-2 * wScale, -35 * wScale); 
-        ctx.lineTo(0, -40 * wScale); 
-        ctx.lineTo(2 * wScale, -35 * wScale); 
-        ctx.lineTo(2 * wScale, -5); 
+        ctx.moveTo(-2, -5); ctx.lineTo(-2, -35 * swordLen); ctx.lineTo(0, -40 * swordLen); ctx.lineTo(2, -35 * swordLen); ctx.lineTo(2, -5);
         ctx.fill();
         
-        ctx.fillStyle = '#b45309'; 
-        ctx.fillRect(-6 * wScale, -5, 12 * wScale, 3); 
-        ctx.fillRect(-2 * wScale, -2, 4 * wScale, 8); 
+        // Hilt
+        ctx.fillStyle = '#78350f'; 
+        ctx.fillRect(-6, -5, 12, 3); 
         ctx.restore();
+
+        // Helmet
+        const helmColor = tier === 0 ? '#64748b' : (tier === 1 ? '#94a3b8' : '#facc15');
+        ctx.fillStyle = helmColor;
+        ctx.beginPath();
+        if (tier === 0) {
+            ctx.fillRect(-6, -height-4, 12, 4); // Cap
+        } else {
+            // Full Helm
+            ctx.moveTo(-7, -height); ctx.lineTo(-7, -height-10); ctx.quadraticCurveTo(0, -height-14, 7, -height-10); ctx.lineTo(7, -height);
+            ctx.fill();
+        }
+        
+        // Plume (Tier 2/Hero)
+        if (tier >= 2 || unit.type === UnitType.HERO) {
+            ctx.fillStyle = isPlayer ? '#2563eb' : '#dc2626';
+            ctx.beginPath(); ctx.moveTo(0, -height-14); ctx.quadraticCurveTo(8, -height-22, 12, -height-8); ctx.fill();
+        }
     } 
+
+    // 3. CAVALRY (Rider Equipment)
     else if (unit.type === UnitType.CAVALRY) {
+        // Lance
         ctx.save(); ctx.translate(weaponX, weaponY);
         ctx.strokeStyle = '#d1d5db'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(40, -2); ctx.stroke(); 
-        // Lance Tip
+        
+        // Lance Tip & Flag
         ctx.strokeStyle = tier >= 2 ? '#facc15' : '#991b1b'; 
-        ctx.beginPath(); ctx.moveTo(35, -2); ctx.lineTo(40, -2); ctx.stroke(); 
+        ctx.beginPath(); ctx.moveTo(35, -2); ctx.lineTo(45, -2); ctx.stroke(); 
+        
+        if (tier >= 2) {
+            ctx.fillStyle = isPlayer ? '#2563eb' : '#dc2626';
+            ctx.beginPath(); ctx.moveTo(30, -2); ctx.lineTo(40, -8); ctx.lineTo(40, -2); ctx.fill();
+        }
         ctx.restore();
+
+        // Helmet (Visor style)
+        ctx.fillStyle = tier === 0 ? '#64748b' : (tier === 1 ? '#cbd5e1' : '#facc15');
+        ctx.beginPath(); ctx.moveTo(-6, -height); ctx.lineTo(6, -height); ctx.lineTo(8, -height-8); ctx.lineTo(-8, -height-8); ctx.fill();
     } 
+
+    // 4. ARCHER
     else if (unit.type === UnitType.ARCHER) {
         ctx.save(); 
         ctx.translate(weaponX + 5, weaponY); 
         
-        ctx.fillStyle = '#78350f';
-        ctx.fillRect(-5, -2, 20, 4);
-        
-        ctx.strokeStyle = tier >= 2 ? '#facc15' : '#a16207'; // Gold Bow T2
+        // Bow
+        ctx.strokeStyle = tier >= 2 ? '#facc15' : '#a16207'; // Gold or Wood
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(10, -10);
-        ctx.quadraticCurveTo(8, 0, 10, 10);
+        ctx.moveTo(10, -15);
+        ctx.quadraticCurveTo(-5, 0, 10, 15); // Curved Bow
         ctx.stroke();
         
+        // String
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 1;
         ctx.beginPath();
         if (isAttacking) {
-             ctx.moveTo(10, -10); ctx.lineTo(10, 10);
+             ctx.moveTo(10, -15); ctx.lineTo(-5, 0); ctx.lineTo(10, 15);
+             // Arrow
+             ctx.strokeStyle = '#000'; ctx.moveTo(-5, 0); ctx.lineTo(15, 0);
         } else {
-             ctx.moveTo(10, -10); ctx.lineTo(0, 0); ctx.lineTo(10, 10);
-             ctx.strokeStyle = '#000';
-             ctx.moveTo(0, 0); ctx.lineTo(12, 0);
+             ctx.moveTo(10, -15); ctx.lineTo(10, 15);
         }
         ctx.stroke();
         ctx.restore();
-    }
 
-    // --- HELMETS ---
-    if (unit.type === UnitType.SWORDMAN || unit.type === UnitType.HERO) {
-        ctx.fillStyle = isPlayer ? '#15803d' : '#991b1b'; ctx.beginPath(); ctx.arc(5, -height + 20, 8, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#fbbf24'; ctx.stroke();
-    }
-    
-    if (unit.type === UnitType.MINER) {
-        ctx.fillStyle = tier > 0 ? '#3b82f6' : '#facc15'; ctx.beginPath(); ctx.arc(0, -height - 2, 9, Math.PI, 0); ctx.fill();
-        if (tier > 0) { // Mining Light
-            ctx.fillStyle = '#fef08a'; ctx.beginPath(); ctx.arc(4, -height - 2, 3, 0, Math.PI*2); ctx.fill();
-        }
-    } else if (unit.type === UnitType.SWORDMAN) {
-        ctx.fillStyle = '#64748b'; 
-        if (tier >= 1) ctx.fillStyle = '#94a3b8'; // Iron Helm
-        if (tier >= 2) ctx.fillStyle = '#facc15'; // Gold Helm
-        
-        ctx.beginPath();
-        ctx.moveTo(-8, -height);
-        ctx.lineTo(-8, -height - 8);
-        ctx.quadraticCurveTo(0, -height - 12, 8, -height - 8);
-        ctx.lineTo(8, -height);
-        ctx.fill();
-        
-        // Plume for T2
-        if (tier >= 2) {
-             ctx.fillStyle = isPlayer ? '#2563eb' : '#dc2626';
-             ctx.beginPath(); ctx.moveTo(0, -height-12); ctx.quadraticCurveTo(10, -height-20, 15, -height-5); ctx.fill();
-        }
+        // Quiver
+        ctx.fillStyle = '#78350f';
+        ctx.fillRect(-8, -height+5, 4, 15);
 
-    } else if (unit.type === UnitType.ARCHER) {
+        // Hat
         if (tier >= 1) {
             // Hood
             ctx.fillStyle = '#166534';
-            ctx.beginPath(); ctx.arc(0, -height, 10, Math.PI, 0); ctx.fill();
-            ctx.lineTo(10, -height+5); ctx.lineTo(-10, -height+5); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(0, -height-10); ctx.lineTo(10, -height+2); ctx.lineTo(-10, -height+2); ctx.fill();
         } else {
-            ctx.fillStyle = '#3f6212'; 
-            ctx.fillRect(-6, -height - 4, 12, 4);
-            ctx.beginPath(); ctx.moveTo(-6, -height); ctx.lineTo(8, -height); ctx.lineTo(6, -height+2); ctx.lineTo(-6, -height+2); ctx.fill();
+            // Simple cap
+            ctx.fillStyle = '#3f6212'; ctx.fillRect(-6, -height - 2, 12, 2);
         }
     }
 
-    if (unit.stats.hp < unit.stats.maxHp) {
-        const hpPct = Math.max(0, unit.stats.hp / unit.stats.maxHp);
-        ctx.fillStyle = 'red'; ctx.fillRect(-10, -height - 20, 20, 3);
-        ctx.fillStyle = '#4ade80'; ctx.fillRect(-10, -height - 20, 20 * hpPct, 3);
+    // Health Bar (Small)
+    if (unit.state !== UnitState.DIE) {
+        if (unit.stats.hp < unit.stats.maxHp) {
+            const hpPct = Math.max(0, unit.stats.hp / unit.stats.maxHp);
+            ctx.fillStyle = 'red'; ctx.fillRect(-10, -height - 25, 20, 3);
+            ctx.fillStyle = '#4ade80'; ctx.fillRect(-10, -height - 25, 20 * hpPct, 3);
+        }
     }
 
     ctx.restore();

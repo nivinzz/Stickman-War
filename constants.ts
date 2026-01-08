@@ -89,9 +89,9 @@ export const calculateUnitStats = (type: UnitType, upgradeLevel: number): UnitSt
 
     // Specific Logic
     if (type === UnitType.ARCHER) {
-        // Archers gain 2% Attack Speed (Cooldown reduction) per level
-        // Cap at 60% reduction (0.4 multiplier)
-        const speedScale = Math.max(0.4, 1 - (upgradeLevel * 0.02));
+        // Archers gain 3% Attack Speed (Cooldown reduction) per level (Buffed from 2%)
+        // Cap at 20% of original cooldown (0.2 multiplier) - Insane speed at high levels
+        const speedScale = Math.max(0.2, 1 - (upgradeLevel * 0.03));
         stats.attackSpeed = Math.floor(base.attackSpeed * speedScale);
     } else if (type === UnitType.MINER) {
         // Miners gain Movement Speed

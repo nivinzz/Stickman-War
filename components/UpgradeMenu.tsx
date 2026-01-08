@@ -8,9 +8,10 @@ interface UpgradeMenuProps {
   gold: number;
   onUpgrade: (type: keyof UpgradeState, cost: number) => void;
   lang: Language;
+  maxReachedLevel: number;
 }
 
-const UpgradeMenu: React.FC<UpgradeMenuProps> = ({ upgrades, gold, onUpgrade, lang }) => {
+const UpgradeMenu: React.FC<UpgradeMenuProps> = ({ upgrades, gold, onUpgrade, lang, maxReachedLevel }) => {
   const [isOpen, setIsOpen] = useState(false);
   const t = TRANS[lang];
   
@@ -26,7 +27,7 @@ const UpgradeMenu: React.FC<UpgradeMenuProps> = ({ upgrades, gold, onUpgrade, la
       return cost;
   };
 
-  const getStatPreview = (key: keyof UpgradeState, level: number) => {
+  const getStatPreview = (key: keyof UpgradeState, level: number, isMax: boolean) => {
       const nextLevel = level + 1;
       let currentInfo = "";
       let nextInfo = "";
@@ -35,28 +36,28 @@ const UpgradeMenu: React.FC<UpgradeMenuProps> = ({ upgrades, gold, onUpgrade, la
       if (key === 'swordDamage') {
           const c = calculateUnitStats(UnitType.SWORDMAN, level);
           const n = calculateUnitStats(UnitType.SWORDMAN, nextLevel);
-          currentInfo = `HP:${c.maxHp} Dmg:${c.damage}`;
-          nextInfo = `HP:${n.maxHp} Dmg:${n.damage}`;
+          currentInfo = `HP: ${c.maxHp} | Dmg: ${c.damage}`;
+          nextInfo = `HP: ${n.maxHp} | Dmg: ${n.damage}`;
       } else if (key === 'archerDamage') {
           const c = calculateUnitStats(UnitType.ARCHER, level);
           const n = calculateUnitStats(UnitType.ARCHER, nextLevel);
-          currentInfo = `HP:${c.maxHp} Dmg:${c.damage} Spd:${(60/c.attackSpeed).toFixed(1)}/s`;
-          nextInfo = `HP:${n.maxHp} Dmg:${n.damage} Spd:${(60/n.attackSpeed).toFixed(1)}/s`;
+          currentInfo = `HP: ${c.maxHp} | Dmg: ${c.damage} | Spd: ${(60/c.attackSpeed).toFixed(1)}/s`;
+          nextInfo = `HP: ${n.maxHp} | Dmg: ${n.damage} | Spd: ${(60/n.attackSpeed).toFixed(1)}/s`;
       } else if (key === 'cavalryDamage') {
           const c = calculateUnitStats(UnitType.CAVALRY, level);
           const n = calculateUnitStats(UnitType.CAVALRY, nextLevel);
-          currentInfo = `HP:${c.maxHp} Dmg:${c.damage}`;
-          nextInfo = `HP:${n.maxHp} Dmg:${n.damage}`;
+          currentInfo = `HP: ${c.maxHp} | Dmg: ${c.damage}`;
+          nextInfo = `HP: ${n.maxHp} | Dmg: ${n.damage}`;
       } else if (key === 'heroPower') {
           const c = calculateUnitStats(UnitType.HERO, level);
           const n = calculateUnitStats(UnitType.HERO, nextLevel);
-          currentInfo = `HP:${c.maxHp} Dmg:${c.damage}`;
-          nextInfo = `HP:${n.maxHp} Dmg:${n.damage}`;
+          currentInfo = `HP: ${c.maxHp} | Dmg: ${c.damage}`;
+          nextInfo = `HP: ${n.maxHp} | Dmg: ${n.damage}`;
       } else if (key === 'minerSpeed') {
            const c = calculateUnitStats(UnitType.MINER, level);
            const n = calculateUnitStats(UnitType.MINER, nextLevel);
-           currentInfo = `Spd:${c.speed.toFixed(1)} Gold:${25+level}`;
-           nextInfo = `Spd:${n.speed.toFixed(1)} Gold:${25+nextLevel}`;
+           currentInfo = `Spd: ${c.speed.toFixed(1)} | Gold: ${25+level}`;
+           nextInfo = `Spd: ${n.speed.toFixed(1)} | Gold: ${25+nextLevel}`;
       } 
       // Building Stats
       else if (key === 'baseHp') {
@@ -75,43 +76,68 @@ const UpgradeMenu: React.FC<UpgradeMenuProps> = ({ upgrades, gold, onUpgrade, la
       }
       
       return (
-          <div className="text-[9px] text-slate-400 font-mono mt-0.5">
-              {currentInfo} <span className="text-green-400">→ {nextInfo}</span>
+          <div className="text-[10px] font-mono mt-1 w-full bg-slate-900/50 p-1 rounded">
+              <div className="text-green-400 font-semibold">{currentInfo}</div>
+              {!isMax && (
+                <div className="text-red-400 mt-0.5 border-t border-slate-700 pt-0.5">
+                    ➤ {nextInfo}
+                </div>
+              )}
           </div>
       );
   };
 
   const renderUpgrade = (icon: string, label: string, level: number, key: keyof UpgradeState) => {
       const cost = getCost(level);
-      const limit = MAX_UPGRADE_LEVELS[key] || 99; 
-      const isMax = level >= limit;
+      const globalLimit = MAX_UPGRADE_LEVELS[key] || 99; 
       
+      // --- PROGRESS GATING LOGIC ---
+      // Primary units (Sword, Archer, Cav): Limit = maxReachedLevel
+      // Secondary (Base, Tower, Hero, etc): Limit = Math.ceil(maxReachedLevel / 2.5)
+      
+      const isPrimary = key === 'swordDamage' || key === 'archerDamage' || key === 'cavalryDamage';
+      const progressCap = isPrimary ? maxReachedLevel : Math.ceil(maxReachedLevel * 0.4); 
+      
+      // The effective limit is the smaller of the Game Global Limit and the Player Progress Limit
+      const effectiveLimit = Math.min(globalLimit, progressCap);
+      const isMax = level >= globalLimit;
+      const isGated = level >= effectiveLimit && !isMax;
+
       return (
         <button 
             key={key}
-            onClick={() => !isMax && onUpgrade(key, cost)}
-            disabled={isMax || gold < cost}
-            className={`w-full text-xs py-2 px-2 mb-1 rounded flex flex-col items-stretch transition-colors
+            onClick={() => !isMax && !isGated && onUpgrade(key, cost)}
+            disabled={isMax || isGated || gold < cost}
+            className={`w-full text-xs py-2 px-2 mb-1 rounded flex flex-col items-stretch transition-colors border
                 ${isMax 
-                    ? 'bg-slate-800 border border-yellow-600 text-yellow-500'
-                    : gold >= cost 
-                        ? 'bg-slate-700 hover:bg-slate-600 text-white' 
-                        : 'bg-slate-800 text-slate-500 cursor-not-allowed'}`}
+                    ? 'bg-slate-800 border-yellow-600/50 text-slate-300'
+                    : isGated
+                        ? 'bg-slate-900 border-red-900/50 text-slate-600 cursor-not-allowed'
+                        : gold >= cost 
+                            ? 'bg-slate-700 hover:bg-slate-600 text-white border-slate-500' 
+                            : 'bg-slate-800 text-slate-500 cursor-not-allowed border-slate-700'}`}
         >
-            <div className="flex justify-between items-center w-full">
+            <div className="flex justify-between items-center w-full mb-1">
                 <div className="flex items-center gap-2">
                     <span className="text-lg">{icon}</span>
                     <div className="flex flex-col items-start text-left">
-                        <span className="font-bold">{label}</span>
-                        <span className={`text-[10px] ${isMax ? 'text-yellow-500' : 'text-slate-400'}`}>
-                            {isMax ? 'MAX' : `Lvl ${level}/${limit}`}
-                        </span>
+                        <span className="font-bold text-sm">{label}</span>
+                        <div className="flex items-center gap-1">
+                            <span className={`text-[10px] ${isMax ? 'text-yellow-500 font-bold' : 'text-slate-400'}`}>
+                                {isMax ? 'MAX LEVEL' : `Lvl ${level}/${globalLimit}`}
+                            </span>
+                            {isGated && (
+                                <span className="text-[9px] text-red-500 font-bold border border-red-900 px-1 rounded bg-black/40">
+                                    LOCKED (Req Map {isPrimary ? effectiveLimit + 1 : Math.ceil((level + 1) * 2.5)})
+                                </span>
+                            )}
+                        </div>
                     </div>
                 </div>
-                {!isMax && <span className="text-yellow-400 font-mono">{cost}G</span>}
+                {!isMax && !isGated && <span className="text-yellow-400 font-mono font-bold">{cost}G</span>}
             </div>
             
-            {!isMax && getStatPreview(key, level)}
+            {getStatPreview(key, level, isMax)}
         </button>
       );
   };

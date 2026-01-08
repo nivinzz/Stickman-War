@@ -48,8 +48,6 @@ export class GameEngine {
   patrolPoint: number | null = null; 
   
   // --- AI LOGIC PROPERTIES ---
-  enemyRallyPoint: number | null = null;
-  enemyPatrolPoint: number | null = null;
   aiState: 'ATTACK' | 'DEFEND' | 'MASSING' = 'ATTACK';
   aiStateTimer: number = 0;
   enemySkillCooldowns: { ARROW_RAIN: number; LIGHTNING: number; FREEZE: number } = { ARROW_RAIN: 0, LIGHTNING: 0, FREEZE: 0 };
@@ -84,6 +82,14 @@ export class GameEngine {
     // --- BUFFED AI STARTING GOLD ---
     this.enemyGold = 300 + (level.level * 100); 
     
+    // --- FREE TOWER FOR AI LEVEL 5+ ---
+    if (level.level >= 5) {
+        this.enemyTowers = 1;
+        // Higher levels get more towers pre-built
+        if (level.level >= 20) this.enemyTowers = 2;
+        if (level.level >= 40) this.enemyTowers = 3;
+    }
+
     // --- BUFFED AI UPGRADE LEVELS ---
     const baseAILevel = Math.max(0, Math.floor(level.level * 0.9));
     const bonusDmg = Math.floor(level.level / 3);
@@ -395,7 +401,7 @@ export class GameEngine {
       height: (type === UnitType.HERO ? 60 : 40) * sizeMultiplier,
       animationFrame: 0,
       rotation: 0,
-      deathTimer: 120,
+      deathTimer: 60, // 1 Second linger
       opacity: 1,
       freezeTimer: 0,
       isSlowed: false,
@@ -759,6 +765,13 @@ export class GameEngine {
     this.units.forEach(unit => {
       if (unit.state === UnitState.DIE) {
         unit.deathTimer--;
+        
+        // --- DEATH ANIMATION: FALL BACKWARDS ---
+        // Rotate up to 90 degrees (PI/2)
+        if (unit.rotation < Math.PI / 2) {
+             unit.rotation += 0.1;
+        }
+
         unit.opacity = unit.deathTimer / 60;
         if (unit.deathTimer <= 0) unit.state = UnitState.DEAD;
         return;
@@ -883,6 +896,7 @@ export class GameEngine {
                   soundManager.playHit();
                   this.createParticles(target.x, target.y - 20, 3, '#ef4444');
                   if (target.stats.hp <= 0) {
+                      unit.targetId = null; // Clear target
                       target.state = UnitState.DIE;
                       this.rewardKill(target);
                   }
@@ -1090,7 +1104,6 @@ export class GameEngine {
   }
   
   updateAI() {
-     // AI Logic
      if (this.frame % 60 !== 0) return; // Tick once per second
 
      const activeUnits = this.units.filter(u => u.faction === Faction.ENEMY && u.state !== UnitState.DEAD);
@@ -1098,30 +1111,74 @@ export class GameEngine {
      const fighters = activeUnits.length - miners;
      const targetMiners = Math.min(6, 2 + Math.floor(this.level.level / 3));
 
-     // 1. Build Economy
-     if (miners < targetMiners && this.enemyGold >= UNIT_CONFIG[UnitType.MINER].cost) {
+     // --- 1. INTELLIGENT DEFENSE (Anti-Cheese) ---
+     // If Player has units close to base OR base HP is low -> FORCE TOWER
+     const playerUnitsNear = this.units.some(u => u.faction === Faction.PLAYER && u.state !== UnitState.DEAD && u.x > ENEMY_BASE_X - 600);
+     const baseLow = this.enemyBaseHp < this.enemyMaxBaseHp * 0.75;
+     
+     if ((playerUnitsNear || baseLow) && this.enemyTowers < MAX_TOWERS) {
+         if (this.enemyGold >= TOWER_COST_BASE) {
+             this.buyTower(Faction.ENEMY);
+         }
+     }
+
+     // --- 2. ECONOMY PRIORITY ---
+     // AI must have at least 2 miners before thinking about attacking, unless absolutely desperate
+     if (miners < 2 && this.enemyGold >= UNIT_CONFIG[UnitType.MINER].cost) {
          this.queueUnit(UnitType.MINER, Faction.ENEMY);
          return;
      }
 
-     // 2. Buy Towers if rich
-     if (this.enemyGold > 3000 && this.enemyTowers < 3) {
-         this.buyTower(Faction.ENEMY);
+     // --- 3. MASSING LOGIC (The "Blob" Strategy) ---
+     // If the player has a small army (likely blocking), AI should save up to overwhelm
+     const playerArmyCount = this.units.filter(u => u.faction === Faction.PLAYER && u.type !== UnitType.MINER && u.state !== UnitState.DEAD).length;
+     
+     // Transition to MASSING if player is turtling with few units
+     if (this.aiState === 'ATTACK' && playerArmyCount < 3 && fighters < 2) {
+         this.aiState = 'MASSING';
      }
 
-     // 3. Build Army (Random mix favored by level theme maybe?)
-     if (this.enemyGold > 100) {
-         const roll = Math.random();
-         if (roll < 0.4 && this.enemyGold >= UNIT_CONFIG[UnitType.SWORDMAN].cost) {
-             this.queueUnit(UnitType.SWORDMAN, Faction.ENEMY);
-         } else if (roll < 0.7 && this.enemyGold >= UNIT_CONFIG[UnitType.ARCHER].cost) {
-             this.queueUnit(UnitType.ARCHER, Faction.ENEMY);
-         } else if (roll < 0.9 && this.enemyGold >= UNIT_CONFIG[UnitType.CAVALRY].cost) {
-             this.queueUnit(UnitType.CAVALRY, Faction.ENEMY);
-         } else if (this.enemyGold >= UNIT_CONFIG[UnitType.HERO].cost) {
-             // Rare hero spawn
-             const heroCount = activeUnits.filter(u => u.type === UnitType.HERO).length;
-             if (heroCount < 3) this.queueUnit(UnitType.HERO, Faction.ENEMY);
+     // Transition back to ATTACK if rich enough or player army grows
+     if (this.aiState === 'MASSING') {
+         // Tier 1 Mass: 600G (Enough for ~3 Archers or Cavalry mix)
+         // Tier 2 Mass (Level 20+): 1500G
+         const massThreshold = this.level.level > 20 ? 1500 : 600;
+         
+         if (this.enemyGold >= massThreshold || playerArmyCount > 5 || playerUnitsNear) {
+             this.aiState = 'ATTACK';
+         } else {
+             // While massing, keep buying miners if needed
+             if (miners < targetMiners && this.enemyGold >= UNIT_CONFIG[UnitType.MINER].cost) {
+                 this.queueUnit(UnitType.MINER, Faction.ENEMY);
+             }
+             return; // Don't spend gold on units yet
+         }
+     }
+
+     // --- 4. ATTACK PHASE ---
+     if (this.aiState === 'ATTACK') {
+         // Economy Check: Maintain miners
+         if (miners < targetMiners && this.enemyGold >= UNIT_CONFIG[UnitType.MINER].cost) {
+             this.queueUnit(UnitType.MINER, Faction.ENEMY);
+             return;
+         }
+
+         // Unit Composition Logic
+         if (this.enemyGold > 100) {
+             const roll = Math.random();
+             // Adjust composition based on what the player is doing? (Future improvement)
+             // For now, balanced mix
+             
+             if (roll < 0.35 && this.enemyGold >= UNIT_CONFIG[UnitType.SWORDMAN].cost) {
+                 this.queueUnit(UnitType.SWORDMAN, Faction.ENEMY);
+             } else if (roll < 0.65 && this.enemyGold >= UNIT_CONFIG[UnitType.ARCHER].cost) {
+                 this.queueUnit(UnitType.ARCHER, Faction.ENEMY);
+             } else if (roll < 0.9 && this.enemyGold >= UNIT_CONFIG[UnitType.CAVALRY].cost) {
+                 this.queueUnit(UnitType.CAVALRY, Faction.ENEMY);
+             } else if (this.enemyGold >= UNIT_CONFIG[UnitType.HERO].cost) {
+                 const heroCount = activeUnits.filter(u => u.type === UnitType.HERO).length;
+                 if (heroCount < 3) this.queueUnit(UnitType.HERO, Faction.ENEMY);
+             }
          }
      }
   }

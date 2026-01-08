@@ -322,7 +322,7 @@ const App: React.FC = () => {
             STICKMAN WAR
             <span className="block text-2xl text-slate-400 font-normal mt-2">
                 Mountain Defense 
-                <span className="text-sm text-slate-500 bg-slate-800 px-2 py-1 rounded-full ml-2 align-middle">v1.1</span>
+                <span className="text-sm text-slate-500 bg-slate-800 px-2 py-1 rounded-full ml-2 align-middle">v1.2</span>
             </span>
           </h1>
           <button 
@@ -428,7 +428,14 @@ const App: React.FC = () => {
                 targetingSkill={activeSkill}
                 onSkillUsed={() => setActiveSkill(null)}
             />
-            <UpgradeMenu upgrades={upgrades} gold={gold} onUpgrade={handleUpgrade} lang={lang} />
+            {/* Pass maxReachedLevel for Gating */}
+            <UpgradeMenu 
+                upgrades={upgrades} 
+                gold={gold} 
+                onUpgrade={handleUpgrade} 
+                lang={lang} 
+                maxReachedLevel={maxReachedLevel} 
+            />
             
             {/* Start / Pause Overlay */}
             {(!gameStarted || paused) && (
