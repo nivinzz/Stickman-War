@@ -112,6 +112,7 @@ export interface Projectile {
   rotation: number;
   points?: {x: number, y: number}[]; // For Lightning zigzag
   opacity?: number; // For fading effects
+  targetId?: string; // NEW: For homing arrows
 }
 
 export interface Particle {

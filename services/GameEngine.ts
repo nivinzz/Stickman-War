@@ -920,7 +920,8 @@ export class GameEngine {
       faction: unit.faction,
       active: true,
       type: 'ARROW',
-      rotation: angle
+      rotation: angle,
+      targetId: target.id // Assign target for tracking
     });
     
     soundManager.playAttack('ARCHER');
@@ -1066,7 +1067,8 @@ export class GameEngine {
           
           if (canRetreat) {
               // Move away from enemy
-              unit.x += kiteDir * unit.stats.speed * speedMult;
+              // KITING SPEED REDUCTION: 80% of normal speed
+              unit.x += kiteDir * (unit.stats.speed * 0.8) * speedMult;
               // Force combat mode check below so we can shoot
               movingToFlag = false; 
           }
@@ -1231,17 +1233,51 @@ export class GameEngine {
               continue;
           }
 
-          if (p.type === 'ARROW' || p.type === 'TOWER_SHOT') {
+          // Special tracking logic for Homing Arrows
+          if (p.type === 'ARROW' && p.targetId) {
+                const target = this.units.find(u => u.id === p.targetId);
+                if (target && target.state !== UnitState.DEAD && target.state !== UnitState.DIE) {
+                    // Homing: Calculate direct vector to target's body center
+                    const tx = target.x;
+                    const ty = target.y - target.height / 2;
+                    const dx = tx - p.x;
+                    const dy = ty - p.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const speed = 15;
+
+                    if (dist < 20) {
+                        // Force collision in next logic block
+                        p.x = tx;
+                        p.y = ty;
+                    } else {
+                        // Steer velocity towards target (Perfect homing)
+                        p.vx = (dx / dist) * speed;
+                        p.vy = (dy / dist) * speed;
+                        p.x += p.vx;
+                        p.y += p.vy;
+                        p.rotation = Math.atan2(p.vy, p.vx);
+                    }
+                } else {
+                    // Target dead? Lose homing, fall to ground
+                    p.targetId = undefined;
+                    p.vy += GRAVITY;
+                    p.x += p.vx;
+                    p.y += p.vy;
+                }
+          } else if (p.type === 'ARROW' || p.type === 'TOWER_SHOT') {
               p.x += p.vx;
               p.y += p.vy;
-              p.vy += GRAVITY;
+              p.vy += GRAVITY; // Regular arrows still have gravity
               p.rotation = Math.atan2(p.vy, p.vx);
+          }
 
-              if (p.y >= GROUND_Y) {
-                  p.active = false;
-                  continue;
-              }
+          if ((p.type === 'ARROW' || p.type === 'TOWER_SHOT') && p.y >= GROUND_Y) {
+              p.active = false;
+              continue;
+          }
 
+          // Collision Detection
+          if (p.type === 'ARROW' || p.type === 'TOWER_SHOT') {
               const targets = this.units.filter(u => 
                   u.faction !== p.faction && 
                   u.state !== UnitState.DIE && 
