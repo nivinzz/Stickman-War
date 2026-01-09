@@ -1271,6 +1271,26 @@ export class GameEngine {
               p.rotation = Math.atan2(p.vy, p.vx);
           }
 
+          // --- BASE COLLISION CHECK ---
+          if (p.type === 'ARROW') {
+               const isPlayerShot = p.faction === Faction.PLAYER;
+               const targetBaseX = isPlayerShot ? ENEMY_BASE_X : PLAYER_BASE_X;
+               
+               // Castle is approx 120px wide centered at BASE_X. Height is 160px from GROUND_Y up.
+               // Check if arrow is within horizontal bounds and vertical bounds
+               if (Math.abs(p.x - targetBaseX) < 60 && p.y > (GROUND_Y - 160) && p.y < GROUND_Y) {
+                   if (isPlayerShot) {
+                       this.enemyBaseHp -= p.damage;
+                   } else {
+                       this.playerBaseHp -= p.damage;
+                   }
+                   p.active = false;
+                   this.createParticles(p.x, p.y, 3, '#94a3b8'); // Stone chip color
+                   soundManager.playHit();
+                   continue;
+               }
+          }
+
           if ((p.type === 'ARROW' || p.type === 'TOWER_SHOT') && p.y >= GROUND_Y) {
               p.active = false;
               continue;

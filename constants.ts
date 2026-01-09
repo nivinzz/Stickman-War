@@ -44,9 +44,11 @@ export const FPS = 60;
 export const UNIT_CONFIG: Record<UnitType, UnitStats> = {
   [UnitType.MINER]: { hp: 60, maxHp: 60, damage: 5, range: 10, speed: 2, attackSpeed: 60, cost: 50, spawnTime: 120 }, 
   [UnitType.SWORDMAN]: { hp: 150, maxHp: 150, damage: 20, range: 40, speed: 1.5, attackSpeed: 50, cost: 100, spawnTime: 180 },
-  [UnitType.ARCHER]: { hp: 80, maxHp: 80, damage: 15, range: 450, minRange: 200, speed: 1.2, attackSpeed: 90, cost: 200, spawnTime: 240 }, 
+  // Archer: Range increased from 450 to 475 (+5%)
+  [UnitType.ARCHER]: { hp: 80, maxHp: 80, damage: 15, range: 475, minRange: 200, speed: 1.2, attackSpeed: 90, cost: 200, spawnTime: 240 }, 
   [UnitType.CAVALRY]: { hp: 300, maxHp: 300, damage: 35, range: 70, speed: 3.5, attackSpeed: 60, cost: 350, spawnTime: 360 },
-  [UnitType.HERO]: { hp: 1200, maxHp: 1200, damage: 80, range: 70, speed: 2.0, attackSpeed: 40, cost: 1000, spawnTime: 600 },
+  // Hero: Speed decreased from 2.0 to 1.0 (Slowest unit)
+  [UnitType.HERO]: { hp: 1200, maxHp: 1200, damage: 80, range: 70, speed: 1.0, attackSpeed: 40, cost: 1000, spawnTime: 600 },
 };
 
 // Max Levels for Upgrade Menu (Aligned with new Gating System)
