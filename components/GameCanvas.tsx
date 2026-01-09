@@ -484,8 +484,21 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
                    ctx.fillStyle = p.faction === Faction.PLAYER ? '#60a5fa' : '#f87171';
                    ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
                    ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle; ctx.fill(); ctx.shadowBlur = 0;
+              } else if (p.type === 'ARROW') {
+                  // --- BLUE & LONGER ARROW FOR ARROW RAIN ---
+                  ctx.fillStyle = '#3b82f6'; // Blue color
+                  // Make it longer: -15 to +15 (30px total)
+                  ctx.fillRect(-15, -1.5, 30, 3); 
+                  
+                  // Arrow Head
+                  ctx.beginPath();
+                  ctx.moveTo(15, -4);
+                  ctx.lineTo(22, 0); 
+                  ctx.lineTo(15, 4);
+                  ctx.fill();
               } else {
-                  ctx.fillStyle = '#fff'; ctx.fillRect(-10, -1, 20, 2); ctx.beginPath(); ctx.moveTo(10, -3); ctx.lineTo(15, 0); ctx.lineTo(10, 3); ctx.fill();
+                  // Standard arrow backup
+                   ctx.fillStyle = '#fff'; ctx.fillRect(-10, -1, 20, 2); ctx.beginPath(); ctx.moveTo(10, -3); ctx.lineTo(15, 0); ctx.lineTo(10, 3); ctx.fill();
               }
               ctx.restore();
           } else if (p.type === 'LIGHTNING_BOLT' && p.points) {

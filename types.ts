@@ -83,7 +83,8 @@ export interface Hazard {
     width: number;
     height: number;
     duration: number; // Frames
-    damagePercent: number; // % Max HP per second
+    damagePercent: number; // % Max HP per second (DoT)
+    explosionDamagePercent?: number; // % Max HP on explode
     slowFactor: number; // Speed multiplier (e.g., 0.5)
     faction: Faction; // Added to check for friendly fire
     visuals?: IceShard[]; // Visual data for ice spikes

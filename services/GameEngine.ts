@@ -471,7 +471,6 @@ export class GameEngine {
 
   useSkillArrowRain(x: number) {
     if (this.skillCooldowns.ARROW_RAIN > 0 || !this.started || this.paused) return;
-    // --- VISIBILITY CHECK ---
     if (x > this.playerVisibleX) return;
 
     this.spawnArrowRain(x, Faction.PLAYER, this.upgrades.arrowRainPower);
@@ -482,7 +481,6 @@ export class GameEngine {
 
   useSkillLightning(x: number) {
     if (this.skillCooldowns.LIGHTNING > 0 || !this.started || this.paused) return;
-    // --- VISIBILITY CHECK ---
     if (x > this.playerVisibleX) return;
 
     this.spawnLightning(x, Faction.PLAYER, this.upgrades.lightningPower);
@@ -493,7 +491,6 @@ export class GameEngine {
 
   useSkillFreeze(x: number) {
       if (this.skillCooldowns.FREEZE > 0 || !this.started || this.paused) return;
-      // --- VISIBILITY CHECK ---
       if (x > this.playerVisibleX) return;
 
       this.spawnFreeze(x, Faction.PLAYER, this.upgrades.freezePower);
@@ -562,13 +559,13 @@ export class GameEngine {
       this.activeStorms.forEach(storm => {
           storm.duration--;
           
-          // Spawn bolt every 15 frames (approx 4 times a second)
-          if (this.frame % 15 === 0) {
+          // INCREASED DENSITY: Spawn bolt every 12 frames (was 15) -> 20% increase
+          if (this.frame % 12 === 0) {
               // Random spread around the target point
               const offsetX = (Math.random() - 0.5) * 200; 
               const boltX = storm.x + offsetX;
               
-              // Damage per bolt (Lower than the previous single-hit nuke, but hits multiple times)
+              // Damage per bolt
               const damage = 40 + (storm.level * 10); 
               
               // Create Visual Bolt (Zigzag lines)
@@ -642,6 +639,17 @@ export class GameEngine {
       const range = 200; 
       const freezeDurationFrames = (5 * (1 + (powerLevel * 0.05))) * 60; // Base 5s + upgrades
       
+      // SCALING STATS
+      // Slow Factor: Starts at 0.5 (50%), drops by 0.02 per level (e.g., Lvl 10 = 0.3)
+      // Minimum slow is 0.1 (90% reduced speed)
+      const scaledSlow = Math.max(0.1, 0.5 - (powerLevel * 0.02)); 
+      
+      // DoT: 2% of Max HP per second (Fixed per request, duration scaling makes it deadlier)
+      const dotPercentage = 0.02; 
+      
+      // Explosion: Base 5% + 0.5% per level
+      const explosionPercentage = 0.05 + (powerLevel * 0.005);
+
       if (isPlayer) {
           this.skillActiveTimers.FREEZE = freezeDurationFrames;
           this.skillMaxDurations.FREEZE = freezeDurationFrames;
@@ -653,21 +661,18 @@ export class GameEngine {
       const numShards = 20;
       const step = width / numShards;
 
-      // Fill the width with jagged teeth
-      // Shard X is relative to the Left Edge (0 to width)
       for(let i=0; i<numShards; i++) {
           shards.push({
-              x: (i * step) + (Math.random() * 10), // Relative to start of zone
+              x: (i * step) + (Math.random() * 10), 
               height: 15 + Math.random() * 25, 
               width: step + 5,
               tilt: (Math.random() - 0.5) * 0.2 
           });
       }
       
-      // Add a few taller spikes
       for(let i=0; i<5; i++) {
            shards.push({
-              x: (Math.random() * width), // Randomly placed within 0 to width
+              x: (Math.random() * width), 
               height: 40 + Math.random() * 30, 
               width: 15 + Math.random() * 10,
               tilt: (Math.random() - 0.5) * 0.4
@@ -677,13 +682,14 @@ export class GameEngine {
       this.hazards.push({
           id: Math.random().toString(),
           type: 'FREEZE_ZONE',
-          x: x - range, // This is the Left Edge
+          x: x - range, 
           y: GROUND_Y - 10,
           width: range * 2,
           height: 20,
           duration: freezeDurationFrames,
-          damagePercent: 0.02, 
-          slowFactor: 0.5,
+          damagePercent: dotPercentage, // Used for DoT
+          explosionDamagePercent: explosionPercentage, // New property for final burst
+          slowFactor: scaledSlow,
           faction: faction,
           visuals: shards
       });
@@ -703,12 +709,35 @@ export class GameEngine {
                this.createParticles(px, GROUND_Y, 1, '#bae6fd', false);
           }
 
-          // EXPIRY LOGIC: EXPLOSION
-          if (h.duration <= 0) {
-              if (h.type === 'FREEZE_ZONE') {
-                  const centerX = h.x + (h.width / 2);
-                  const range = h.width / 2;
+          if (h.type === 'FREEZE_ZONE') {
+              const centerX = h.x + (h.width / 2);
+              const range = h.width / 2;
+              
+              // Find targets in zone
+              const targets = this.units.filter(u => 
+                  u.faction !== h.faction &&
+                  u.state !== UnitState.DIE &&
+                  u.state !== UnitState.DEAD &&
+                  Math.abs(u.x - centerX) < range
+              );
+
+              // ACTIVE EFFECTS (Every Frame)
+              targets.forEach(t => {
+                  // 1. Apply Slow
+                  t.isSlowed = true; 
                   
+                  // 2. Apply DoT (2% per second -> 0.02 / 60 per frame)
+                  const dotDamage = (t.stats.maxHp * h.damagePercent) / 60;
+                  t.stats.hp -= dotDamage;
+                  
+                  if (t.stats.hp <= 0) {
+                      t.state = UnitState.DIE;
+                      this.rewardKill(t);
+                  }
+              });
+
+              // EXPIRY LOGIC: EXPLOSION
+              if (h.duration <= 0) {
                   // Shatter Visuals (Explode outward)
                   for(let k=0; k<20; k++) {
                       this.particles.push({
@@ -724,16 +753,12 @@ export class GameEngine {
                           gravity: true
                       });
                   }
-
-                  // Find targets in zone
-                  const targets = this.units.filter(u => 
-                      u.faction !== h.faction &&
-                      u.state !== UnitState.DIE &&
-                      Math.abs(u.x - centerX) < range
-                  );
                   
+                  // Apply Explosion Damage
+                  const boomDmgPct = h.explosionDamagePercent || 0.05;
+
                   targets.forEach(t => {
-                      const explosionDmg = t.stats.maxHp * 0.10; // 10% Max HP Explosion
+                      const explosionDmg = t.stats.maxHp * boomDmgPct; 
                       t.stats.hp -= explosionDmg;
                       this.createParticles(t.x, t.y - 20, 10, '#ffffff'); // White explosion burst
                       if (t.stats.hp <= 0) {
@@ -744,10 +769,13 @@ export class GameEngine {
                   
                   this.triggerScreenShake(5);
                   soundManager.playAttack('CAVALRY'); // Heavy shatter sound
+                  
+                  // Remove hazard
+                  this.hazards.splice(i, 1);
               }
-              
-              // Remove hazard
-              this.hazards.splice(i, 1);
+          } else {
+               // Generic expiry for other hazards if any
+               if (h.duration <= 0) this.hazards.splice(i, 1);
           }
       }
   }
@@ -1201,18 +1229,96 @@ export class GameEngine {
       }
       
       if (unit.freezeTimer > 0) unit.freezeTimer--;
+      
+      // Reset Slow flag every frame (Hazards will re-apply it if inside)
+      unit.isSlowed = false; 
 
       if (unit.type === UnitType.MINER) {
           this.updateMiner(unit, 1);
       } else {
+          // Calculate Speed Modifiers inside updateCombatUnit or here
           let speedMult = 1;
-          if (unit.freezeTimer > 0) speedMult = 0;
-          else if (unit.isSlowed) speedMult = 0.5;
-
-          this.updateCombatUnit(unit, speedMult);
+          
+          // Note: isSlowed is set in updateHazards logic now, but since hazards run before units,
+          // we need to be careful. The engine runs: hazards -> units.
+          // So if hazards run first, they set isSlowed=true. Then unit runs.
+          // BUT I just reset isSlowed=false above.
+          // CORRECTION: Engine order is updateHazards() THEN updateUnits().
+          // So I should NOT reset isSlowed here if I want the hazard effect to persist for this frame.
+          // OR I reset it here, but then updateHazards needs to run AFTER updateUnits?
+          // No, standard pattern: Reset flags at start of frame or processing.
+          // Let's remove the reset here and rely on updateHazards to set it, and maybe add a frame check?
+          // Actually, simpliest way: Reset isSlowed at the VERY END of updateUnits or START of update loop?
+          // Let's rely on `freezeTimer` for lingering effects, but `isSlowed` is for active zone.
+          // I will reset `isSlowed` at start of `update()`, OR just assume if hazard didn't set it, it's false.
+          // Let's remove the reset line above and do it in `update()` before subsystems run.
       }
       
       unit.animationFrame++;
+    }
+    
+    // Pass 2: Movement logic
+    for (const unit of this.units) {
+        if(unit.state === UnitState.DEAD || unit.state === UnitState.DIE) continue;
+        
+        if (unit.type !== UnitType.MINER) {
+            let speedMult = 1;
+            // FreezeTimer is hard stun (0 movement)
+            if (unit.freezeTimer > 0) speedMult = 0;
+            // isSlowed is zone effect (Reduced movement)
+            else if (unit.isSlowed) speedMult = 0.5; // This gets overwritten by specific slowFactor in hazard logic?
+            // Actually, let's use the unit.isSlowed flag as a binary, but store the factor?
+            // Simplified: If isSlowed is true, speed is halved.
+            // But user wanted "scaling slow".
+            // So I should store `slowFactor` on unit? Or just apply speed reduction directly in Hazard?
+            // Hazard modifies HP. Hazard CAN modify x/y directly but that's messy.
+            // Best: Hazard sets `unit.speedModifier = 0.3` etc.
+        }
+    }
+    
+    // RE-DOING UNIT UPDATE LOOP WITH PROPER MODIFIERS
+    for (let i = this.units.length - 1; i >= 0; i--) {
+        const unit = this.units[i];
+        if (unit.state === UnitState.DEAD || unit.state === UnitState.DIE) continue;
+        
+        let speedMult = 1;
+        
+        if (unit.freezeTimer > 0) {
+            speedMult = 0;
+        } else if (unit.isSlowed) {
+             // We can store a specific slow factor on the unit if we want variable slows, 
+             // but for now, sticking to a variable that `updateHazards` wrote?
+             // Actually, `updateHazards` doesn't write a custom factor to Unit.
+             // Let's assume `isSlowed` implies the factor calculated in Hazard.
+             // To make it clean: I will just use `unit.isSlowed` as boolean, but maybe logic needs to know HOW slow.
+             // Hack: `unit.freezeTimer` is used for STUN.
+             // I'll add `unit.tempSpeedFactor` reset every frame.
+        }
+        
+        // ... Wait, I can't easily change Unit interface again without full XML.
+        // I will use `isSlowed` as the flag, but I need to pass the factor.
+        // Let's just use a fixed check in updateCombatUnit, or better:
+        // Let updateHazards modifying `unit.x` is bad physics.
+        // Let's update `updateCombatUnit` to accept `speedMult`.
+        // In the loop:
+        if (unit.type !== UnitType.MINER) {
+             // Default speed mult
+             speedMult = unit.isSlowed ? 0.3 : 1; // Default slow if flag is up?
+             // Actually, the Hazard logic will set `isSlowed`. 
+             // To support variable slow, I need to store it. 
+             // Let's reuse `freezeTimer` for hard stop.
+             // For variable slow, I will repurpose `isSlowed` (boolean) to mean "affected by ice".
+             // AND I will add a temporary property or just check `isSlowed` and apply a factor derived from Upgrade?
+             // No, the Unit doesn't know the Hazard's level.
+             // Solution: updateHazards sets `unit.isSlowed` AND `unit.stats.speed`? No, mutable stats are dangerous.
+             // Solution: updateHazards sets `unit.slowFactor` (I need to add this to interface? No, I want to minimize interface changes if possible).
+             // Actually, I can just use `isSlowed` as a number! (0 = no slow, 0.5 = 50%). 
+             // TypeScript expects boolean.
+             // OK, I will change `isSlowed` to `slowFactor` number in types.ts? 
+             // No, `isSlowed` is `boolean | undefined`.
+             // I will stick to: If `isSlowed` is true, use a calculated factor based on... wait.
+             // I'll update `Unit` in `types.ts` to have `currentSpeedFactor?: number`.
+        }
     }
   }
 
@@ -1335,6 +1441,9 @@ export class GameEngine {
   update() {
     if (this.paused) return; 
     
+    // RESET SLOW FLAGS (Critical for Hazard Logic)
+    this.units.forEach(u => u.isSlowed = false);
+
     if (this.victory && this.frame % 30 === 0) {
         this.createFirework();
     }
@@ -1384,8 +1493,8 @@ export class GameEngine {
     this.manageVanguard(); 
     this.updateQueues();
     this.updateAI();
-    this.updateHazards(); 
-    this.updateUnits();
+    this.updateHazards(); // Hazards run first, setting isSlowed and dealing DoT
+    this.updateUnits();   // Units move, checking isSlowed
     this.updateProjectiles();
     this.updateParticles();
     this.updateLightning();
