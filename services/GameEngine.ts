@@ -1157,7 +1157,14 @@ export class GameEngine {
       // 4. Skills
       if (this.level.enemySmartAI) {
           if (this.enemySkillCooldowns.ARROW_RAIN <= 0 && Math.random() < 0.005) {
-              const targets = this.units.filter(u => u.faction === Faction.PLAYER);
+              // FIX: Only target visible player units
+              const targets = this.units.filter(u => 
+                  u.faction === Faction.PLAYER &&
+                  u.state !== UnitState.DIE &&
+                  u.state !== UnitState.DEAD &&
+                  u.x > this.enemyVisibleX // The unit must be to the right of the fog line
+              );
+
               if (targets.length > 0) {
                   const t = targets[Math.floor(Math.random() * targets.length)];
                   this.spawnArrowRain(t.x, Faction.ENEMY, this.enemyUpgrades.arrowRainPower);
