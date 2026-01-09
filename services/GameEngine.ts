@@ -898,6 +898,60 @@ export class GameEngine {
       }
   }
 
+  fireArrow(unit: Unit, target: Unit) {
+    const dx = target.x - unit.x;
+    const dy = (target.y - target.height / 2) - (unit.y - unit.height / 2);
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    // Calculate angle with slight arc
+    // Heuristic: Aim slightly higher than direct line based on distance
+    const arcAdjust = Math.min(dist / 4, 150); 
+    const angle = Math.atan2(dy - arcAdjust, dx);
+    const speed = 15;
+
+    this.projectiles.push({
+      id: Math.random().toString(),
+      x: unit.x,
+      y: unit.y - unit.height / 2,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      startX: unit.x,
+      damage: unit.stats.damage,
+      faction: unit.faction,
+      active: true,
+      type: 'ARROW',
+      rotation: angle
+    });
+    
+    soundManager.playAttack('ARCHER');
+  }
+
+  fireArrowAtBase(unit: Unit, baseX: number) {
+    const dx = baseX - unit.x;
+    const dy = (GROUND_Y - 150) - (unit.y - unit.height / 2); // Aim at castle center
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    const arcAdjust = Math.min(dist / 4, 150);
+    const angle = Math.atan2(dy - arcAdjust, dx);
+    const speed = 15;
+
+    this.projectiles.push({
+      id: Math.random().toString(),
+      x: unit.x,
+      y: unit.y - unit.height / 2,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      startX: unit.x,
+      damage: unit.stats.damage,
+      faction: unit.faction,
+      active: true,
+      type: 'ARROW',
+      rotation: angle
+    });
+    
+    soundManager.playAttack('ARCHER');
+  }
+
   updateCombatUnit(unit: Unit, speedMult: number) {
       const isPlayer = unit.faction === Faction.PLAYER;
       const enemyBaseX = isPlayer ? ENEMY_BASE_X : PLAYER_BASE_X;
@@ -1082,130 +1136,6 @@ export class GameEngine {
       }
   }
 
-  fireArrow(unit: Unit, target: Unit) {
-    const startX = unit.x;
-    const startY = unit.y - unit.height / 2;
-    const endX = target.x;
-    const endY = target.y - target.height / 2;
-    
-    // Calculate distance and flight time
-    const dist = Math.abs(endX - startX);
-    const speed = 15;
-    const time = Math.max(20, dist / speed);
-
-    const vx = (endX - startX) / time;
-    const vy = (endY - startY - 0.5 * GRAVITY * time * time) / time;
-
-    this.projectiles.push({
-      id: Math.random().toString(),
-      x: startX,
-      y: startY,
-      vx: vx,
-      vy: vy,
-      startX: startX,
-      damage: unit.stats.damage,
-      faction: unit.faction,
-      active: true,
-      type: 'ARROW',
-      rotation: Math.atan2(vy, vx)
-    });
-    
-    soundManager.playAttack('ARCHER');
-  }
-
-  fireArrowAtBase(unit: Unit, targetX: number) {
-    const startX = unit.x;
-    const startY = unit.y - unit.height / 2;
-    const endX = targetX;
-    const endY = GROUND_Y - 100; // Hit roughly center of base
-
-    const dist = Math.abs(endX - startX);
-    const speed = 15;
-    const time = Math.max(20, dist / speed);
-
-    const vx = (endX - startX) / time;
-    const vy = (endY - startY - 0.5 * GRAVITY * time * time) / time;
-
-    this.projectiles.push({
-      id: Math.random().toString(),
-      x: startX,
-      y: startY,
-      vx: vx,
-      vy: vy,
-      startX: startX,
-      damage: unit.stats.damage,
-      faction: unit.faction,
-      active: true,
-      type: 'ARROW',
-      rotation: Math.atan2(vy, vx)
-    });
-    
-    soundManager.playAttack('ARCHER');
-  }
-
-  updateAI() {
-      // 1. Gold Drip
-      if (this.frame % 60 === 0) {
-          const passive = 1 + (this.enemyUpgrades.passiveGold * 2) + this.level.enemyGoldDrip;
-          this.enemyGold += passive;
-      }
-
-      // 2. Unit Spawning
-      if (this.frame % this.level.enemySpawnRate === 0) {
-          const enemyMiners = this.units.filter(u => u.faction === Faction.ENEMY && u.type === UnitType.MINER).length;
-          const desiredMiners = 2 + Math.floor(this.level.level / 5);
-          
-          if (enemyMiners < desiredMiners && this.enemyGold >= UNIT_CONFIG[UnitType.MINER].cost) {
-              this.queueUnit(UnitType.MINER, Faction.ENEMY);
-          } else {
-              const available = [UnitType.SWORDMAN];
-              if (this.level.level >= 2) available.push(UnitType.ARCHER);
-              if (this.level.level >= 5) available.push(UnitType.CAVALRY);
-              if (this.level.level >= 10 && this.enemyGold > 1000) available.push(UnitType.HERO);
-
-              const type = available[Math.floor(Math.random() * available.length)];
-              if (this.enemyGold >= UNIT_CONFIG[type].cost) {
-                  this.queueUnit(type, Faction.ENEMY);
-              }
-          }
-      }
-
-      // 3. Strategy
-      if (this.level.enemySmartAI && this.frame % 300 === 0) {
-          const pCount = this.units.filter(u => u.faction === Faction.PLAYER).length;
-          const eCount = this.units.filter(u => u.faction === Faction.ENEMY).length;
-          
-          if (eCount < pCount * 0.5 && eCount < 5) {
-              this.aiState = 'DEFEND';
-          } else if (eCount > pCount + 2) {
-              this.aiState = 'ATTACK';
-          }
-      }
-
-      // 4. Skills
-      if (this.level.enemySmartAI) {
-          if (this.enemySkillCooldowns.ARROW_RAIN <= 0 && Math.random() < 0.005) {
-              // FIX: Only target visible player units
-              const targets = this.units.filter(u => 
-                  u.faction === Faction.PLAYER &&
-                  u.state !== UnitState.DIE &&
-                  u.state !== UnitState.DEAD &&
-                  u.x > this.enemyVisibleX // The unit must be to the right of the fog line
-              );
-
-              if (targets.length > 0) {
-                  const t = targets[Math.floor(Math.random() * targets.length)];
-                  this.spawnArrowRain(t.x, Faction.ENEMY, this.enemyUpgrades.arrowRainPower);
-                  this.enemySkillCooldowns.ARROW_RAIN = SKILL_COOLDOWNS_FRAMES.ARROW_RAIN;
-              }
-          }
-      }
-      
-      if (this.enemyTowers < MAX_TOWERS && this.enemyGold > 3000 && this.level.level > 5) {
-           this.buyTower(Faction.ENEMY);
-      }
-  }
-
   updateUnits() {
     for (let i = this.units.length - 1; i >= 0; i--) {
       const unit = this.units[i];
@@ -1227,98 +1157,32 @@ export class GameEngine {
         }
         continue;
       }
-      
+
       if (unit.freezeTimer > 0) unit.freezeTimer--;
-      
-      // Reset Slow flag every frame (Hazards will re-apply it if inside)
-      unit.isSlowed = false; 
 
       if (unit.type === UnitType.MINER) {
           this.updateMiner(unit, 1);
       } else {
-          // Calculate Speed Modifiers inside updateCombatUnit or here
           let speedMult = 1;
-          
-          // Note: isSlowed is set in updateHazards logic now, but since hazards run before units,
-          // we need to be careful. The engine runs: hazards -> units.
-          // So if hazards run first, they set isSlowed=true. Then unit runs.
-          // BUT I just reset isSlowed=false above.
-          // CORRECTION: Engine order is updateHazards() THEN updateUnits().
-          // So I should NOT reset isSlowed here if I want the hazard effect to persist for this frame.
-          // OR I reset it here, but then updateHazards needs to run AFTER updateUnits?
-          // No, standard pattern: Reset flags at start of frame or processing.
-          // Let's remove the reset here and rely on updateHazards to set it, and maybe add a frame check?
-          // Actually, simpliest way: Reset isSlowed at the VERY END of updateUnits or START of update loop?
-          // Let's rely on `freezeTimer` for lingering effects, but `isSlowed` is for active zone.
-          // I will reset `isSlowed` at start of `update()`, OR just assume if hazard didn't set it, it's false.
-          // Let's remove the reset line above and do it in `update()` before subsystems run.
+
+          if (unit.freezeTimer > 0) {
+              speedMult = 0; // Hard Stun
+          } else if (unit.isSlowed) {
+              // Calculate dynamic slow based on opponent's freeze level
+              // If I am Enemy, I am slowed by Player's Freeze Power
+              const opponentPower = unit.faction === Faction.ENEMY ? this.upgrades.freezePower : this.enemyUpgrades.freezePower;
+
+              // Base slow 50%, +2% per level
+              // e.g., Level 0 = 50% slow (0.5 mult)
+              // Level 10 = 70% slow (0.3 mult)
+              const slowPercent = 0.5 + (opponentPower * 0.02);
+              speedMult = Math.max(0.1, 1 - slowPercent);
+          }
+
+          this.updateCombatUnit(unit, speedMult);
       }
-      
+
       unit.animationFrame++;
-    }
-    
-    // Pass 2: Movement logic
-    for (const unit of this.units) {
-        if(unit.state === UnitState.DEAD || unit.state === UnitState.DIE) continue;
-        
-        if (unit.type !== UnitType.MINER) {
-            let speedMult = 1;
-            // FreezeTimer is hard stun (0 movement)
-            if (unit.freezeTimer > 0) speedMult = 0;
-            // isSlowed is zone effect (Reduced movement)
-            else if (unit.isSlowed) speedMult = 0.5; // This gets overwritten by specific slowFactor in hazard logic?
-            // Actually, let's use the unit.isSlowed flag as a binary, but store the factor?
-            // Simplified: If isSlowed is true, speed is halved.
-            // But user wanted "scaling slow".
-            // So I should store `slowFactor` on unit? Or just apply speed reduction directly in Hazard?
-            // Hazard modifies HP. Hazard CAN modify x/y directly but that's messy.
-            // Best: Hazard sets `unit.speedModifier = 0.3` etc.
-        }
-    }
-    
-    // RE-DOING UNIT UPDATE LOOP WITH PROPER MODIFIERS
-    for (let i = this.units.length - 1; i >= 0; i--) {
-        const unit = this.units[i];
-        if (unit.state === UnitState.DEAD || unit.state === UnitState.DIE) continue;
-        
-        let speedMult = 1;
-        
-        if (unit.freezeTimer > 0) {
-            speedMult = 0;
-        } else if (unit.isSlowed) {
-             // We can store a specific slow factor on the unit if we want variable slows, 
-             // but for now, sticking to a variable that `updateHazards` wrote?
-             // Actually, `updateHazards` doesn't write a custom factor to Unit.
-             // Let's assume `isSlowed` implies the factor calculated in Hazard.
-             // To make it clean: I will just use `unit.isSlowed` as boolean, but maybe logic needs to know HOW slow.
-             // Hack: `unit.freezeTimer` is used for STUN.
-             // I'll add `unit.tempSpeedFactor` reset every frame.
-        }
-        
-        // ... Wait, I can't easily change Unit interface again without full XML.
-        // I will use `isSlowed` as the flag, but I need to pass the factor.
-        // Let's just use a fixed check in updateCombatUnit, or better:
-        // Let updateHazards modifying `unit.x` is bad physics.
-        // Let's update `updateCombatUnit` to accept `speedMult`.
-        // In the loop:
-        if (unit.type !== UnitType.MINER) {
-             // Default speed mult
-             speedMult = unit.isSlowed ? 0.3 : 1; // Default slow if flag is up?
-             // Actually, the Hazard logic will set `isSlowed`. 
-             // To support variable slow, I need to store it. 
-             // Let's reuse `freezeTimer` for hard stop.
-             // For variable slow, I will repurpose `isSlowed` (boolean) to mean "affected by ice".
-             // AND I will add a temporary property or just check `isSlowed` and apply a factor derived from Upgrade?
-             // No, the Unit doesn't know the Hazard's level.
-             // Solution: updateHazards sets `unit.isSlowed` AND `unit.stats.speed`? No, mutable stats are dangerous.
-             // Solution: updateHazards sets `unit.slowFactor` (I need to add this to interface? No, I want to minimize interface changes if possible).
-             // Actually, I can just use `isSlowed` as a number! (0 = no slow, 0.5 = 50%). 
-             // TypeScript expects boolean.
-             // OK, I will change `isSlowed` to `slowFactor` number in types.ts? 
-             // No, `isSlowed` is `boolean | undefined`.
-             // I will stick to: If `isSlowed` is true, use a calculated factor based on... wait.
-             // I'll update `Unit` in `types.ts` to have `currentSpeedFactor?: number`.
-        }
     }
   }
 
@@ -1435,6 +1299,90 @@ export class GameEngine {
           this.enemyBaseHp = 0;
           soundManager.playVictory();
           this.onStateChange(this);
+      }
+  }
+
+  updateAI() {
+      // 1. AI State Machine
+      if (this.aiStateTimer > 0) {
+          this.aiStateTimer--;
+      } else {
+          const r = Math.random();
+          if (this.aiState === 'ATTACK') {
+              if (r < 0.4) { this.aiState = 'DEFEND'; this.aiStateTimer = 600; }
+              else if (r < 0.6) { this.aiState = 'MASSING'; this.aiStateTimer = 400; }
+              else { this.aiStateTimer = 600; } // Keep Attacking
+          } else if (this.aiState === 'DEFEND') {
+              if (r < 0.5) { this.aiState = 'ATTACK'; this.aiStateTimer = 900; }
+              else { this.aiState = 'MASSING'; this.aiStateTimer = 300; }
+          } else if (this.aiState === 'MASSING') {
+              this.aiState = 'ATTACK';
+              this.aiStateTimer = 1200;
+          } else { // RETREAT
+              this.aiState = 'DEFEND';
+              this.aiStateTimer = 300;
+          }
+      }
+
+      // 2. Spawn Logic
+      const enemyUnits = this.units.filter(u => u.faction === Faction.ENEMY && u.state !== UnitState.DEAD && u.state !== UnitState.DIE);
+      const enemyMiners = enemyUnits.filter(u => u.type === UnitType.MINER).length;
+      
+      // Target Miner Count: Base 3 + 1 per 2 levels, max 15
+      const targetMiners = Math.min(15, 3 + Math.floor(this.level.level / 2));
+      
+      const queueMiners = this.enemyQueue.filter(q => q.type === UnitType.MINER).length;
+
+      if (enemyMiners + queueMiners < targetMiners) {
+           this.queueUnit(UnitType.MINER, Faction.ENEMY);
+      } else {
+           // Buy Combat Units
+           // Simple weighting
+           if (this.enemyGold >= 100) { // Min cost for sword
+                const r = Math.random();
+                // Ratios change by level
+                let type = UnitType.SWORDMAN;
+                if (this.level.level >= 3 && r < 0.4) type = UnitType.ARCHER;
+                if (this.level.level >= 6 && r < 0.15) type = UnitType.CAVALRY;
+                if (this.level.level >= 10 && r < 0.05) type = UnitType.HERO;
+                
+                this.queueUnit(type, Faction.ENEMY);
+           }
+      }
+      
+      // 3. Tower Buying
+      if (this.enemyGold > 2000 && this.enemyTowers < MAX_TOWERS && this.level.level >= 5) {
+           this.buyTower(Faction.ENEMY);
+      }
+      
+      // 4. Skills Usage (Smart AI)
+      if (this.level.enemySmartAI) {
+           const playerUnits = this.units.filter(u => u.faction === Faction.PLAYER && u.state !== UnitState.DEAD && u.state !== UnitState.DIE);
+           if (playerUnits.length >= 4) {
+               // Calculate average position
+               let sumX = 0;
+               playerUnits.forEach(u => sumX += u.x);
+               const avgX = sumX / playerUnits.length;
+               
+               // Only use if within range
+               if (avgX > this.enemyVisibleX) {
+                    // Arrow Rain
+                    if (this.enemySkillCooldowns.ARROW_RAIN <= 0 && this.level.level >= 4) {
+                        this.spawnArrowRain(avgX, Faction.ENEMY, this.enemyUpgrades.arrowRainPower);
+                        this.enemySkillCooldowns.ARROW_RAIN = SKILL_COOLDOWNS_FRAMES.ARROW_RAIN;
+                    } 
+                    // Lightning
+                    else if (this.enemySkillCooldowns.LIGHTNING <= 0 && this.level.level >= 8) {
+                        this.spawnLightning(avgX, Faction.ENEMY, this.enemyUpgrades.lightningPower);
+                        this.enemySkillCooldowns.LIGHTNING = SKILL_COOLDOWNS_FRAMES.LIGHTNING;
+                    }
+                    // Freeze
+                    else if (this.enemySkillCooldowns.FREEZE <= 0 && this.level.level >= 12 && playerUnits.length > 8) {
+                         this.spawnFreeze(avgX, Faction.ENEMY, this.enemyUpgrades.freezePower);
+                         this.enemySkillCooldowns.FREEZE = SKILL_COOLDOWNS_FRAMES.FREEZE;
+                    }
+               }
+           }
       }
   }
 
