@@ -1,5 +1,5 @@
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { GameEngine } from '../services/GameEngine';
 import { Unit, Faction, UnitType, UnitState } from '../types';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, WORLD_WIDTH, GROUND_Y, PLAYER_BASE_X, ENEMY_BASE_X, MINING_DISTANCE, getTheme } from '../constants';
@@ -10,6 +10,12 @@ interface GameCanvasProps {
   onSkillUsed: () => void;
 }
 
+// Data structures for static background elements
+interface MountainPoint { x: number; h: number; }
+// Removed Vine interface
+interface Star { x: number; y: number; size: number; alpha: number; }
+interface Crack { x: number; y: number; path: {x: number, y: number}[] }
+
 const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkillUsed }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
@@ -18,45 +24,208 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [lastMouseX, setLastMouseX] = useState<number>(0);
   const [hoverX, setHoverX] = useState<number>(0); 
+  
+  const cameraXRef = useRef(0);
+  useEffect(() => { cameraXRef.current = cameraX; }, [cameraX]);
 
   const theme = getTheme(engine.level.level);
+  const biome = Math.floor((engine.level.level - 1) / 5) % 12;
+
+  // --- PRE-CALCULATE STATIC BACKGROUND DATA (Memoized) ---
+  const staticBg = useMemo(() => {
+      const levelSeed = engine.level.level * 100;
+      const mountainPoints: MountainPoint[] = [];
+      const stars: Star[] = [];
+      const cracks: Crack[] = [];
+      
+      const isJagged = (biome === 3 || biome === 5 || biome === 11);
+      const isMesa = (biome === 2 || biome === 9); 
+      const isNight = biome === 4 || biome === 7 || biome === 8 || biome === 11;
+
+      // 1. Generate Mountain Shape
+      for(let x = 0; x <= WORLD_WIDTH; x += 40) {
+          let h = 0;
+          if (isMesa) {
+               const cycle = (x + levelSeed) % 800;
+               if (cycle < 100) h = cycle * 2; 
+               else if (cycle < 500) h = 200 + Math.sin(x * 0.05) * 10;
+               else if (cycle < 600) h = 200 - (cycle - 500) * 2; 
+               else h = 0; 
+          } else {
+               const wave1 = Math.sin((x + levelSeed) * 0.005);
+               const wave2 = Math.sin((x + levelSeed) * 0.02) * 0.5;
+               const noise = Math.sin((x * levelSeed) % 100) * (isJagged ? 0.4 : 0.1);
+               h = 150 + (Math.abs(wave1 + wave2 + noise) * (isJagged ? 250 : 200));
+          }
+          mountainPoints.push({ x, h });
+      }
+
+      // 2. Generate Stars (Night biomes)
+      if (isNight) {
+          for(let i=0; i<60; i++) {
+               stars.push({
+                   x: Math.random() * WORLD_WIDTH,
+                   y: Math.random() * (GROUND_Y - 150),
+                   size: 0.5 + Math.random() * 2,
+                   alpha: 0.3 + Math.random() * 0.7
+               });
+          }
+      }
+
+      // 3. Generate Cracks (Desert/Volcano)
+      if (biome === 2 || biome === 5 || biome === 11) {
+          for(let i=0; i<25; i++) {
+              const cx = Math.random() * WORLD_WIDTH;
+              const cy = GROUND_Y + Math.random() * 80;
+              cracks.push({
+                  x: cx,
+                  y: cy,
+                  path: [
+                      {x: 10 + Math.random() * 10, y: 5 + Math.random() * 5},
+                      {x: 20 + Math.random() * 10, y: -5 + Math.random() * 5}
+                  ]
+              });
+          }
+      }
+
+      return { mountainPoints, stars, cracks };
+  }, [engine.level.level, biome]); 
 
   // --- DRAWING HELPERS ---
   
+  const drawGoldMine = (ctx: CanvasRenderingContext2D, x: number, isPlayer: boolean) => {
+      ctx.save();
+      ctx.translate(x, GROUND_Y);
+      if (!isPlayer) ctx.scale(-1, 1);
+
+      // Cave Mound
+      ctx.fillStyle = '#57534e'; // Stone color
+      ctx.beginPath();
+      ctx.arc(0, 0, 40, Math.PI, 0); // Semi-circle
+      ctx.fill();
+
+      // Entrance
+      ctx.fillStyle = '#292524'; // Darker cave
+      ctx.beginPath();
+      ctx.arc(0, 0, 25, Math.PI, 0);
+      ctx.fill();
+
+      // Gold Nuggests (Sparkles)
+      ctx.fillStyle = '#facc15'; // Yellow
+      ctx.beginPath(); ctx.arc(-15, -10, 3, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(10, -25, 4, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(20, -5, 2, 0, Math.PI*2); ctx.fill();
+
+      // Wooden Supports
+      ctx.fillStyle = '#451a03';
+      ctx.fillRect(-30, -35, 5, 35);
+      ctx.fillRect(25, -35, 5, 35);
+      ctx.fillRect(-30, -35, 60, 5);
+
+      ctx.restore();
+  };
+
+  const drawCastleHP = (ctx: CanvasRenderingContext2D, x: number, hp: number, maxHp: number) => {
+      const width = 100;
+      const height = 8;
+      const y = GROUND_Y - 160; 
+
+      ctx.fillStyle = '#000';
+      ctx.fillRect(x - width/2 - 1, y - 1, width + 2, height + 2);
+
+      const pct = Math.max(0, hp / maxHp);
+      ctx.fillStyle = '#ef4444'; 
+      ctx.fillRect(x - width/2, y, width, height);
+      
+      ctx.fillStyle = '#22c55e'; 
+      ctx.fillRect(x - width/2, y, width * pct, height);
+  };
+
+  // Tree Drawing Functions 
+  const drawTreeStandard = (ctx: CanvasRenderingContext2D, scale: number, variant: number) => {
+      ctx.fillStyle = theme.treeTrunk;
+      ctx.fillRect(-5, -40, 10, 40);
+      ctx.fillStyle = variant === 0 ? theme.treeLeaf1 : theme.treeLeaf2;
+      ctx.beginPath();
+      ctx.arc(0, -50, 25, 0, Math.PI * 2);
+      ctx.arc(-15, -40, 20, 0, Math.PI * 2);
+      ctx.arc(15, -40, 20, 0, Math.PI * 2);
+      ctx.fill();
+  };
+  const drawTreePine = (ctx: CanvasRenderingContext2D, scale: number, variant: number) => {
+      ctx.fillStyle = theme.treeTrunk;
+      ctx.fillRect(-4, -20, 8, 20);
+      ctx.fillStyle = variant === 0 ? theme.treeLeaf1 : theme.treeLeaf2;
+      ctx.beginPath(); ctx.moveTo(0, -50); ctx.lineTo(25, -20); ctx.lineTo(-25, -20); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(0, -70); ctx.lineTo(20, -40); ctx.lineTo(-20, -40); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(0, -85); ctx.lineTo(15, -60); ctx.lineTo(-15, -60); ctx.fill();
+  };
+  const drawCactus = (ctx: CanvasRenderingContext2D, scale: number, variant: number) => {
+      ctx.fillStyle = theme.treeLeaf1; 
+      ctx.beginPath(); ctx.roundRect(-8, -60, 16, 60, 8); ctx.fill();
+      ctx.beginPath(); ctx.roundRect(8, -45, 15, 10, 5); ctx.roundRect(18, -65, 10, 25, 5); ctx.fill();
+      ctx.beginPath(); ctx.roundRect(-23, -35, 15, 10, 5); ctx.roundRect(-28, -50, 10, 20, 5); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      for(let i=0; i<5; i++) ctx.fillRect(-2, -55 + (i*10), 4, 2);
+  };
+  const drawDeadTree = (ctx: CanvasRenderingContext2D, scale: number, variant: number) => {
+      ctx.strokeStyle = theme.treeTrunk;
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, 0); ctx.lineTo(0, -40); ctx.lineTo(-15, -60); 
+      ctx.moveTo(0, -40); ctx.lineTo(10, -55); ctx.moveTo(10, -55); ctx.lineTo(20, -70); 
+      ctx.moveTo(0, -20); ctx.lineTo(15, -30); ctx.stroke();
+  };
+
   const drawEnvironment = (ctx: CanvasRenderingContext2D) => {
-      // Draw Trees (Background)
       engine.envElements.forEach(e => {
           if (e.type === 'TREE') {
               ctx.save();
               ctx.translate(e.x, e.y);
               ctx.scale(e.scale, e.scale);
-              
-              // Trunk
-              ctx.fillStyle = '#451a03';
-              ctx.fillRect(-5, -40, 10, 40);
-              
-              // Leaves (Improved)
-              ctx.fillStyle = e.variant === 0 ? '#166534' : (e.variant === 1 ? '#15803d' : '#3f6212');
-              ctx.beginPath();
-              ctx.moveTo(0, -60);
-              ctx.lineTo(25, -20);
-              ctx.lineTo(-25, -20);
-              ctx.fill();
-              ctx.beginPath();
-              ctx.moveTo(0, -45);
-              ctx.lineTo(20, -10);
-              ctx.lineTo(-20, -10);
-              ctx.fill();
-              
+              if (biome === 2 || biome === 9) drawCactus(ctx, e.scale, e.variant);
+              else if (biome === 3 || biome === 10) drawTreePine(ctx, e.scale, e.variant);
+              else if (biome === 5 || biome === 7 || biome === 8 || biome === 11) drawDeadTree(ctx, e.scale, e.variant);
+              else drawTreeStandard(ctx, e.scale, e.variant);
               ctx.restore();
           }
       });
   };
 
   const drawSkyElements = (ctx: CanvasRenderingContext2D) => {
+       const isNight = biome === 4 || biome === 7 || biome === 8 || biome === 11;
+       
+       // Draw Static Stars
+       if (isNight) {
+           ctx.fillStyle = '#fff';
+           staticBg.stars.forEach(star => {
+               ctx.globalAlpha = star.alpha;
+               ctx.beginPath(); ctx.arc(star.x, star.y, star.size, 0, Math.PI*2); ctx.fill();
+           });
+           ctx.globalAlpha = 1;
+
+           // Moon (Static position)
+           ctx.fillStyle = '#fef3c7';
+           ctx.shadowBlur = 20; ctx.shadowColor = '#fef3c7';
+           ctx.beginPath(); ctx.arc(WORLD_WIDTH - 200, 100, 40, 0, Math.PI*2); ctx.fill();
+           ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
+           ctx.fillStyle = 'rgba(0,0,0,0.1)';
+           ctx.beginPath(); ctx.arc(WORLD_WIDTH - 190, 110, 10, 0, Math.PI*2); ctx.fill();
+           ctx.beginPath(); ctx.arc(WORLD_WIDTH - 210, 90, 8, 0, Math.PI*2); ctx.fill();
+       } else {
+           // Sun (Static position)
+           ctx.fillStyle = '#fcd34d';
+           ctx.shadowBlur = 40; ctx.shadowColor = '#f59e0b';
+           ctx.beginPath(); ctx.arc(200, 100, 50, 0, Math.PI*2); ctx.fill();
+           ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
+       }
+
+       // Animated Clouds & Birds
        engine.envElements.forEach(e => {
           if (e.type === 'CLOUD') {
-              ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+              const cloudColor = (biome === 5 || biome === 7 || biome === 11) ? 'rgba(50, 50, 50, 0.4)' : 'rgba(255, 255, 255, 0.4)';
+              ctx.fillStyle = cloudColor;
               ctx.beginPath();
               ctx.arc(e.x, e.y, 30 * e.scale, 0, Math.PI * 2);
               ctx.arc(e.x + 40 * e.scale, e.y, 40 * e.scale, 0, Math.PI * 2);
@@ -64,7 +233,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
               ctx.fill();
           }
           if (e.type === 'BIRD') {
-              ctx.fillStyle = '#000';
+              ctx.fillStyle = (biome === 4 || biome === 7) ? '#fff' : '#000'; 
               ctx.beginPath();
               ctx.moveTo(e.x, e.y);
               ctx.lineTo(e.x + 5, e.y + 2);
@@ -75,42 +244,54 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
        });
   };
 
-  const drawFlag = (ctx: CanvasRenderingContext2D, x: number, isRed: boolean = false) => {
+  const drawFlag = (ctx: CanvasRenderingContext2D, x: number, color: 'RED' | 'BLUE' | 'GREEN') => {
       ctx.save();
       ctx.translate(x, GROUND_Y);
-      
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 3;
+      const strokeColor = color === 'RED' ? 'rgba(239, 68, 68, 0.5)' : (color === 'BLUE' ? 'rgba(59, 130, 246, 0.5)' : 'rgba(34, 197, 94, 0.5)');
+      const fillColor = color === 'RED' ? '#ef4444' : (color === 'BLUE' ? '#3b82f6' : '#22c55e');
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -60); ctx.stroke();
-
-      ctx.fillStyle = isRed ? '#ef4444' : '#3b82f6'; 
+      ctx.fillStyle = fillColor; 
       ctx.beginPath(); ctx.moveTo(0, -60); ctx.lineTo(25, -45); ctx.lineTo(0, -30); ctx.fill();
-
-      ctx.strokeStyle = isRed ? 'rgba(239, 68, 68, 0.5)' : 'rgba(59, 130, 246, 0.5)';
+      ctx.strokeStyle = strokeColor;
       ctx.beginPath(); ctx.ellipse(0, 0, 15, 5, 0, 0, Math.PI * 2); ctx.stroke();
-      
       ctx.restore();
   };
   
   const drawHazards = (ctx: CanvasRenderingContext2D) => {
       engine.hazards.forEach(h => {
           if (h.type === 'FREEZE_ZONE') {
-              // Ice floor
-              ctx.fillStyle = 'rgba(186, 230, 253, 0.6)';
-              ctx.fillRect(h.x, h.y, h.width, h.height);
-              
-              // Sparkles
-              ctx.fillStyle = '#fff';
-              if (Math.random() > 0.8) {
-                  const spX = h.x + Math.random() * h.width;
-                  const spY = h.y + Math.random() * h.height;
-                  ctx.fillRect(spX, spY, 2, 2);
+              const isPlayer = h.faction === Faction.PLAYER;
+              const baseColorTop = isPlayer ? 'rgba(224, 242, 254, 0.9)' : 'rgba(254, 202, 202, 0.9)'; 
+              const baseColorBot = isPlayer ? 'rgba(125, 211, 252, 0.6)' : 'rgba(248, 113, 113, 0.6)';
+              const fallbackColor = isPlayer ? 'rgba(186, 230, 253, 0.5)' : 'rgba(252, 165, 165, 0.5)';
+              ctx.save();
+              ctx.translate(h.x, GROUND_Y);
+              if (h.visuals) {
+                  h.visuals.forEach(shard => {
+                      ctx.save();
+                      ctx.translate(shard.x, 0);
+                      ctx.rotate(shard.tilt);
+                      const grad = ctx.createLinearGradient(0, -shard.height, 0, 0);
+                      grad.addColorStop(0, baseColorTop); 
+                      grad.addColorStop(1, baseColorBot); 
+                      ctx.fillStyle = grad;
+                      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+                      ctx.lineWidth = 1;
+                      ctx.beginPath(); ctx.moveTo(0, -shard.height); ctx.lineTo(shard.width/2, 0); ctx.lineTo(-shard.width/2, 0);
+                      ctx.closePath(); ctx.fill(); ctx.stroke();
+                      ctx.restore();
+                  });
+              } else {
+                  ctx.fillStyle = fallbackColor; ctx.fillRect(0, -20, h.width, 20);
               }
+              ctx.fillStyle = '#fff';
+              if (Math.random() > 0.8) { const spX = Math.random() * h.width; ctx.fillRect(spX, -Math.random()*10, 2, 2); }
+              ctx.restore();
           }
       });
   };
 
-  // --- VISUAL EVOLUTION LOGIC ---
   const getUnitTier = (type: UnitType, faction: Faction) => {
       const upgrades = faction === Faction.PLAYER ? engine.upgrades : engine.enemyUpgrades;
       let level = 0;
@@ -118,16 +299,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
       if (type === UnitType.ARCHER) level = upgrades.archerDamage;
       if (type === UnitType.CAVALRY) level = upgrades.cavalryDamage;
       if (type === UnitType.HERO) level = upgrades.heroPower;
-      
-      return Math.floor(level / 10); // Tier 0 (0-9), Tier 1 (10-19), Tier 2 (20+)
+      return Math.floor(level / 10);
   };
 
   const drawStickman = (ctx: CanvasRenderingContext2D, unit: Unit) => {
-    // Fog of War Check
-    if (unit.faction === Faction.ENEMY && unit.x > engine.playerVisibleX) {
-        return; 
-    }
-
+    if (unit.faction === Faction.ENEMY && unit.x > engine.playerVisibleX) return; 
     const isPlayer = unit.faction === Faction.PLAYER;
     const tier = getUnitTier(unit.type, unit.faction);
     const color = isPlayer ? '#4ade80' : '#f87171';
@@ -135,281 +311,150 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
     
     ctx.save();
     ctx.translate(unit.x, unit.y);
-    
-    // Rotation (For Death Animation)
-    // If unit is dying, rotation is applied in Engine. 
-    // We pivot around the feet (0,0) so they fall backward
+    const baseHeight = unit.type === UnitType.HERO ? 60 : 40;
+    const scale = unit.height / baseHeight;
+    const xFlip = !isPlayer ? -1 : 1;
+    ctx.scale(xFlip * scale, scale);
     ctx.rotate(isPlayer ? -unit.rotation : unit.rotation);
-
     ctx.globalAlpha = unit.opacity;
-
-    if (!isPlayer) {
-        ctx.scale(-1, 1);
-    }
+    if (unit.isVanguard) { ctx.fillStyle = 'rgba(34, 197, 94, 0.3)'; ctx.beginPath(); ctx.arc(0, -height/2, 20, 0, Math.PI*2); ctx.fill(); }
 
     const isAttacking = unit.state === UnitState.ATTACK;
     const attackPhase = Math.sin(unit.animationFrame * 0.5); 
     const walkCycle = Math.sin(unit.animationFrame * 0.3) * 8;
     const legSwing = (unit.state === UnitState.MOVE || unit.state === UnitState.MINE_WALK_TO_MINE || unit.state === UnitState.MINE_RETURN) ? walkCycle : 0;
 
-    // --- CAVALRY RENDER (COMPLETELY REDONE) ---
     if (unit.type === UnitType.CAVALRY) {
-        // Colors
-        const horseColor = tier === 0 ? '#78350f' : (tier === 1 ? '#57534e' : '#fefce8'); // Brown -> Grey -> White/Goldish
-        const horseArmor = tier === 0 ? null : (tier === 1 ? '#94a3b8' : '#fbbf24'); // None -> Iron -> Gold
-        
-        // 1. Back Legs
+        const horseColor = tier === 0 ? '#78350f' : (tier === 1 ? '#57534e' : '#fefce8');
+        const horseArmor = tier === 0 ? null : (tier === 1 ? '#94a3b8' : '#fbbf24');
         ctx.fillStyle = horseColor;
         ctx.beginPath(); ctx.moveTo(-10, -20); ctx.lineTo(-15 + legSwing, 0); ctx.lineTo(-10 + legSwing, 0); ctx.lineTo(-5, -20); ctx.fill();
-
-        // 2. Horse Body
         ctx.beginPath(); ctx.ellipse(0, -30, 20, 12, 0, 0, Math.PI * 2); ctx.fill();
-        
-        // Armor Blanket
-        if (tier >= 1) {
-             ctx.fillStyle = isPlayer ? '#1e40af' : '#991b1b';
-             ctx.fillRect(-10, -35, 20, 10);
-        }
-
-        // 3. Front Legs
+        if (tier >= 1) { ctx.fillStyle = isPlayer ? '#1e40af' : '#991b1b'; ctx.fillRect(-10, -35, 20, 10); }
         ctx.fillStyle = horseColor;
         ctx.beginPath(); ctx.moveTo(10, -25); ctx.lineTo(15 - legSwing, 0); ctx.lineTo(20 - legSwing, 0); ctx.lineTo(15, -25); ctx.fill();
-
-        // 4. Neck & Head
-        ctx.save();
-        ctx.translate(15, -35);
-        ctx.rotate(-Math.PI / 4);
-        ctx.fillStyle = horseColor;
-        ctx.fillRect(0, -15, 12, 25); // Neck
-        ctx.restore();
-
-        ctx.save();
-        ctx.translate(25, -50);
-        ctx.fillStyle = horseColor;
-        ctx.beginPath(); ctx.ellipse(0, 0, 8, 5, 0, 0, Math.PI*2); ctx.fill(); // Head
-        
-        // Horse Helmet
-        if (horseArmor) {
-            ctx.fillStyle = horseArmor;
-            ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(5, 0); ctx.lineTo(0, 5); ctx.fill();
-        }
-        ctx.restore();
-
-        // 5. Rider (Stickman sitting)
-        ctx.translate(-5, -20); // Sit offset
-        // Adjust height for visual balance
+        ctx.save(); ctx.translate(15, -35); ctx.rotate(-Math.PI / 4); ctx.fillStyle = horseColor; ctx.fillRect(0, -15, 12, 25); ctx.restore();
+        ctx.save(); ctx.translate(25, -50); ctx.fillStyle = horseColor; ctx.beginPath(); ctx.ellipse(0, 0, 8, 5, 0, 0, Math.PI*2); ctx.fill();
+        if (horseArmor) { ctx.fillStyle = horseArmor; ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(5, 0); ctx.lineTo(0, 5); ctx.fill(); }
+        ctx.restore(); ctx.translate(-5, -20);
     }
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2; if (unit.type === UnitType.HERO) ctx.lineWidth = 3;
 
-    // --- COMMON STICKMAN BODY ---
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineWidth = 2;
-    if (unit.type === UnitType.HERO) ctx.lineWidth = 3;
-
-    // Legs (If not cavalry)
     if (unit.type !== UnitType.CAVALRY) {
-        ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(-5 + legSwing, 0); 
-        ctx.moveTo(0, -15); ctx.lineTo(5 - legSwing, 0); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(-5 + legSwing, 0); ctx.moveTo(0, -15); ctx.lineTo(5 - legSwing, 0); ctx.stroke();
     } else {
-        // Rider Leg
         ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(5, -5); ctx.stroke();
     }
-
-    // Body
     ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(0, -height + 8); ctx.stroke();
-    
-    // Head
     ctx.beginPath(); ctx.arc(0, -height, 8, 0, Math.PI * 2); ctx.fill();
 
-    // Cape (Tier 2 or Hero)
     if ((tier >= 2 || unit.type === UnitType.HERO) && unit.type !== UnitType.MINER) {
-        ctx.save();
-        ctx.fillStyle = isPlayer ? '#1d4ed8' : '#b91c1c'; // Blue or Red Cape
-        ctx.beginPath();
-        ctx.moveTo(-2, -height + 5);
-        ctx.quadraticCurveTo(-15, -height + 15, -15 + (Math.sin(unit.animationFrame * 0.2) * 3), -5);
-        ctx.lineTo(2, -height + 5);
-        ctx.fill();
-        ctx.restore();
+        ctx.save(); ctx.fillStyle = isPlayer ? '#1d4ed8' : '#b91c1c'; ctx.beginPath();
+        ctx.moveTo(-2, -height + 5); ctx.quadraticCurveTo(-15, -height + 15, -15 + (Math.sin(unit.animationFrame * 0.2) * 3), -5);
+        ctx.lineTo(2, -height + 5); ctx.fill(); ctx.restore();
     }
 
-    // --- ARMS & WEAPONS ---
-    let armAngle = Math.PI/6; 
-    let shoulderY = -height + 15; 
-
-    if (unit.type === UnitType.ARCHER) {
-        shoulderY = -height + 6; 
-        armAngle = Math.PI / 2; 
-    } 
+    let armAngle = Math.PI/6; let shoulderY = -height + 15; 
+    if (unit.type === UnitType.ARCHER) { shoulderY = -height + 6; armAngle = Math.PI / 2; } 
     else if (isAttacking) {
-        if (unit.type === UnitType.SWORDMAN || unit.type === UnitType.HERO) {
-            const phaseNormalized = (attackPhase + 1) / 2; 
-            armAngle = -Math.PI * 0.8 + (phaseNormalized * Math.PI); 
-        } else if (unit.type === UnitType.CAVALRY) {
-             // Lancing motion
-             armAngle = 0; 
-        }
+        if (unit.type === UnitType.SWORDMAN || unit.type === UnitType.HERO) { const phaseNormalized = (attackPhase + 1) / 2; armAngle = -Math.PI * 0.8 + (phaseNormalized * Math.PI); } 
+        else if (unit.type === UnitType.CAVALRY) { armAngle = 0; }
     }
+    ctx.beginPath(); ctx.moveTo(0, shoulderY);
+    const handX = Math.sin(armAngle) * 15; const handY = Math.cos(armAngle) * 15;
+    let thrustX = 0; if (unit.type === UnitType.CAVALRY && isAttacking) { thrustX = Math.abs(attackPhase) * 15; }
+    ctx.lineTo(handX + thrustX, shoulderY + handY); ctx.stroke();
 
-    ctx.beginPath();
-    ctx.moveTo(0, shoulderY);
-
-    const handX = Math.sin(armAngle) * 15;
-    const handY = Math.cos(armAngle) * 15;
-    
-    let thrustX = 0;
-    if (unit.type === UnitType.CAVALRY && isAttacking) {
-        thrustX = Math.abs(attackPhase) * 15;
-    }
-
-    ctx.lineTo(handX + thrustX, shoulderY + handY);
-    ctx.stroke();
-
-    const weaponX = handX + thrustX;
-    const weaponY = shoulderY + handY;
-
-    // --- WEAPON & GEAR RENDERING BASED ON TIER ---
-
-    // 1. MINER
+    const weaponX = handX + thrustX; const weaponY = shoulderY + handY;
     if (unit.type === UnitType.MINER) {
-        ctx.save(); ctx.translate(weaponX, weaponY);
-        const chop = Math.abs(Math.sin(unit.animationFrame * 0.2));
+        ctx.save(); ctx.translate(weaponX, weaponY); const chop = Math.abs(Math.sin(unit.animationFrame * 0.2));
         ctx.rotate(unit.state === UnitState.MINE_GATHERING ? -chop : 0);
         ctx.strokeStyle = '#9ca3af'; ctx.beginPath(); ctx.moveTo(0, 5); ctx.lineTo(0, -10); ctx.stroke(); 
-        ctx.strokeStyle = tier > 0 ? '#3b82f6' : '#eab308'; // Diamond vs Gold
-        ctx.beginPath(); ctx.moveTo(-5, -10); ctx.lineTo(5, -8); ctx.stroke(); 
-        
-        // Helmet
-        ctx.restore();
-        ctx.fillStyle = tier > 0 ? '#3b82f6' : '#facc15'; ctx.beginPath(); ctx.arc(0, -height - 2, 9, Math.PI, 0); ctx.fill();
-        // Light
+        ctx.strokeStyle = tier > 0 ? '#3b82f6' : '#eab308'; ctx.beginPath(); ctx.moveTo(-5, -10); ctx.lineTo(5, -8); ctx.stroke(); 
+        ctx.restore(); ctx.fillStyle = tier > 0 ? '#3b82f6' : '#facc15'; ctx.beginPath(); ctx.arc(0, -height - 2, 9, Math.PI, 0); ctx.fill();
         ctx.fillStyle = '#fef08a'; ctx.beginPath(); ctx.arc(4, -height - 2, 3, 0, Math.PI*2); ctx.fill();
     } 
-    
-    // 2. SWORDMAN & HERO
     else if (unit.type === UnitType.SWORDMAN || unit.type === UnitType.HERO) {
-        // Shield
-        ctx.save();
-        ctx.translate(5, -height + 25);
-        ctx.fillStyle = isPlayer ? '#1e293b' : '#450a0a'; // Dark faction color
-        ctx.strokeStyle = tier >= 1 ? '#cbd5e1' : '#94a3b8'; // Iron rim
-        if (tier >= 2 || unit.type === UnitType.HERO) ctx.strokeStyle = '#facc15'; // Gold rim
-        
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        if (tier === 0) {
-            // Round buckler
-            ctx.arc(0, 0, 8, 0, Math.PI*2);
-        } else {
-            // Kite shield
-            ctx.moveTo(-6, -10); ctx.lineTo(6, -10); ctx.lineTo(6, 0); ctx.quadraticCurveTo(0, 12, -6, 0);
-        }
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-
-        // Sword
-        ctx.save(); 
-        ctx.translate(weaponX, weaponY); 
-        ctx.rotate(armAngle); 
-        
-        ctx.fillStyle = tier === 0 ? '#94a3b8' : (tier === 1 ? '#e2e8f0' : '#facc15'); // Stone -> Steel -> Gold
-        if (unit.type === UnitType.HERO) ctx.fillStyle = '#facc15';
-
+        ctx.save(); ctx.translate(5, -height + 25);
+        ctx.fillStyle = isPlayer ? '#1e293b' : '#450a0a'; ctx.strokeStyle = tier >= 1 ? '#cbd5e1' : '#94a3b8';
+        if (tier >= 2 || unit.type === UnitType.HERO) ctx.strokeStyle = '#facc15';
+        ctx.lineWidth = 2; ctx.beginPath();
+        if (tier === 0) ctx.arc(0, 0, 8, 0, Math.PI*2);
+        else { ctx.moveTo(-6, -10); ctx.lineTo(6, -10); ctx.lineTo(6, 0); ctx.quadraticCurveTo(0, 12, -6, 0); }
+        ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+        ctx.save(); ctx.translate(weaponX, weaponY); ctx.rotate(armAngle); 
+        ctx.fillStyle = tier === 0 ? '#94a3b8' : (tier === 1 ? '#e2e8f0' : '#facc15'); if (unit.type === UnitType.HERO) ctx.fillStyle = '#facc15';
         const swordLen = (tier >= 2 || unit.type === UnitType.HERO) ? 1.4 : 1;
-        ctx.beginPath();
-        ctx.moveTo(-2, -5); ctx.lineTo(-2, -35 * swordLen); ctx.lineTo(0, -40 * swordLen); ctx.lineTo(2, -35 * swordLen); ctx.lineTo(2, -5);
-        ctx.fill();
-        
-        // Hilt
-        ctx.fillStyle = '#78350f'; 
-        ctx.fillRect(-6, -5, 12, 3); 
-        ctx.restore();
-
-        // Helmet
+        ctx.beginPath(); ctx.moveTo(-2, -5); ctx.lineTo(-2, -35 * swordLen); ctx.lineTo(0, -40 * swordLen); ctx.lineTo(2, -35 * swordLen); ctx.lineTo(2, -5);
+        ctx.fill(); ctx.fillStyle = '#78350f'; ctx.fillRect(-6, -5, 12, 3); ctx.restore();
         const helmColor = tier === 0 ? '#64748b' : (tier === 1 ? '#94a3b8' : '#facc15');
-        ctx.fillStyle = helmColor;
-        ctx.beginPath();
-        if (tier === 0) {
-            ctx.fillRect(-6, -height-4, 12, 4); // Cap
-        } else {
-            // Full Helm
-            ctx.moveTo(-7, -height); ctx.lineTo(-7, -height-10); ctx.quadraticCurveTo(0, -height-14, 7, -height-10); ctx.lineTo(7, -height);
-            ctx.fill();
-        }
-        
-        // Plume (Tier 2/Hero)
-        if (tier >= 2 || unit.type === UnitType.HERO) {
-            ctx.fillStyle = isPlayer ? '#2563eb' : '#dc2626';
-            ctx.beginPath(); ctx.moveTo(0, -height-14); ctx.quadraticCurveTo(8, -height-22, 12, -height-8); ctx.fill();
-        }
-    } 
-
-    // 3. CAVALRY (Rider Equipment)
+        ctx.fillStyle = helmColor; ctx.beginPath();
+        if (tier === 0) ctx.fillRect(-6, -height-4, 12, 4);
+        else { ctx.moveTo(-7, -height); ctx.lineTo(-7, -height-10); ctx.quadraticCurveTo(0, -height-14, 7, -height-10); ctx.lineTo(7, -height); ctx.fill(); }
+        if (tier >= 2 || unit.type === UnitType.HERO) { ctx.fillStyle = isPlayer ? '#2563eb' : '#dc2626'; ctx.beginPath(); ctx.moveTo(0, -height-14); ctx.quadraticCurveTo(8, -height-22, 12, -height-8); ctx.fill(); }
+    }
+    // --- CAVALRY SPEAR DRAWING LOGIC ---
     else if (unit.type === UnitType.CAVALRY) {
-        // Lance
-        ctx.save(); ctx.translate(weaponX, weaponY);
-        ctx.strokeStyle = '#d1d5db'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(40, -2); ctx.stroke(); 
+        // Draw Spear
+        ctx.save();
+        ctx.translate(5, shoulderY - 15); // Adjust relative to rider shoulder (approx)
         
-        // Lance Tip & Flag
-        ctx.strokeStyle = tier >= 2 ? '#facc15' : '#991b1b'; 
-        ctx.beginPath(); ctx.moveTo(35, -2); ctx.lineTo(45, -2); ctx.stroke(); 
+        // Attack Animation: Thrust forward
+        const thrust = isAttacking ? Math.sin(unit.animationFrame * 0.5) * 15 : 0;
         
-        if (tier >= 2) {
-            ctx.fillStyle = isPlayer ? '#2563eb' : '#dc2626';
-            ctx.beginPath(); ctx.moveTo(30, -2); ctx.lineTo(40, -8); ctx.lineTo(40, -2); ctx.fill();
-        }
-        ctx.restore();
-
-        // Helmet (Visor style)
-        ctx.fillStyle = tier === 0 ? '#64748b' : (tier === 1 ? '#cbd5e1' : '#facc15');
-        ctx.beginPath(); ctx.moveTo(-6, -height); ctx.lineTo(6, -height); ctx.lineTo(8, -height-8); ctx.lineTo(-8, -height-8); ctx.fill();
-    } 
-
-    // 4. ARCHER
-    else if (unit.type === UnitType.ARCHER) {
-        ctx.save(); 
-        ctx.translate(weaponX + 5, weaponY); 
+        // Idle Animation: Slightly angled up. Attack: Level.
+        const angle = isAttacking ? 0 : -Math.PI / 10;
         
-        // Bow
-        ctx.strokeStyle = tier >= 2 ? '#facc15' : '#a16207'; // Gold or Wood
+        ctx.rotate(angle);
+        
+        // Shaft
+        ctx.strokeStyle = '#57534e'; // Wood
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(10, -15);
-        ctx.quadraticCurveTo(-5, 0, 10, 15); // Curved Bow
+        ctx.moveTo(-10, 0);
+        ctx.lineTo(50 + thrust, 0); // Long spear
         ctx.stroke();
         
-        // String
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1;
+        // Spear Tip
+        ctx.fillStyle = tier >= 1 ? '#e2e8f0' : '#94a3b8'; // Metal
+        if (tier >= 2) ctx.fillStyle = '#facc15'; // Gold tip for elite
+        
         ctx.beginPath();
-        if (isAttacking) {
-             ctx.moveTo(10, -15); ctx.lineTo(-5, 0); ctx.lineTo(10, 15);
-             // Arrow
-             ctx.strokeStyle = '#000'; ctx.moveTo(-5, 0); ctx.lineTo(15, 0);
-        } else {
-             ctx.moveTo(10, -15); ctx.lineTo(10, 15);
-        }
-        ctx.stroke();
+        ctx.moveTo(50 + thrust, -3);
+        ctx.lineTo(65 + thrust, 0);
+        ctx.lineTo(50 + thrust, 3);
+        ctx.fill();
+        
+        // Hand holding it
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill();
+        
         ctx.restore();
-
-        // Quiver
-        ctx.fillStyle = '#78350f';
-        ctx.fillRect(-8, -height+5, 4, 15);
-
-        // Hat
-        if (tier >= 1) {
-            // Hood
-            ctx.fillStyle = '#166534';
-            ctx.beginPath(); ctx.moveTo(0, -height-10); ctx.lineTo(10, -height+2); ctx.lineTo(-10, -height+2); ctx.fill();
-        } else {
-            // Simple cap
-            ctx.fillStyle = '#3f6212'; ctx.fillRect(-6, -height - 2, 12, 2);
-        }
     }
-
-    // Health Bar (Small)
+    // -----------------------------------
+    
+    else if (unit.type === UnitType.ARCHER) {
+        const timeSinceAttack = engine.frame - unit.lastAttackFrame; const attackDuration = unit.stats.attackSpeed;
+        const progress = Math.min(1, timeSinceAttack / attackDuration);
+        ctx.save(); ctx.translate(weaponX + 5, weaponY); 
+        const woodColor = tier >= 2 ? '#facc15' : '#a16207'; ctx.strokeStyle = woodColor; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(8, -20); ctx.quadraticCurveTo(15, 0, 8, 20); ctx.stroke();
+        let stringX = 8; let showArrow = false; let arrowX = 0;
+        if (isAttacking) {
+            if (progress < 0.15) { stringX = 8 + (Math.sin(progress * Math.PI * 15) * 3); showArrow = false; } 
+            else if (progress < 0.4) { stringX = 8; showArrow = true; arrowX = 8; } 
+            else { const drawProgress = (progress - 0.4) / 0.6; const tension = Math.pow(drawProgress, 1.2); stringX = 8 - (tension * 13); showArrow = true; arrowX = stringX; }
+        } else { stringX = 8; showArrow = true; arrowX = 8; }
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(8, -20); ctx.lineTo(stringX, 0); ctx.lineTo(8, 20); ctx.stroke();
+        if (showArrow) {
+            const arrowColor = isPlayer ? '#4ade80' : '#ef4444'; ctx.strokeStyle = arrowColor; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(arrowX, 0); ctx.lineTo(arrowX + 25, 0); ctx.stroke();
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(arrowX + 25, 0); ctx.lineTo(arrowX + 22, -3); ctx.lineTo(arrowX + 22, 3); ctx.fill();
+        }
+        ctx.restore();
+        ctx.fillStyle = '#78350f'; ctx.fillRect(-8, -height+5, 4, 15);
+        if (tier >= 1) { ctx.fillStyle = '#166534'; ctx.beginPath(); ctx.moveTo(0, -height-10); ctx.lineTo(10, -height+2); ctx.lineTo(-10, -height+2); ctx.fill(); } else { ctx.fillStyle = '#3f6212'; ctx.fillRect(-6, -height - 2, 12, 2); }
+    }
     if (unit.state !== UnitState.DIE) {
         if (unit.stats.hp < unit.stats.maxHp) {
             const hpPct = Math.max(0, unit.stats.hp / unit.stats.maxHp);
@@ -417,280 +462,147 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
             ctx.fillStyle = '#4ade80'; ctx.fillRect(-10, -height - 25, 20 * hpPct, 3);
         }
     }
-
     ctx.restore();
   };
 
-  // ... (Keep drawCastle and drawFogOfWar same) ...
   const drawCastle = (ctx: CanvasRenderingContext2D, x: number, y: number, isPlayer: boolean) => {
-      // Fog of War Check
-      if (!isPlayer && x > engine.playerVisibleX + 50) { 
-           return;
-      }
-      
-      const stoneColor = isPlayer ? '#334155' : '#450a0a'; // Slate vs Dark Red
-      const stoneLight = isPlayer ? '#475569' : '#7f1d1d';
-      const stoneDark = isPlayer ? '#1e293b' : '#2a0404';
-      const doorColor = '#451a03'; // Dark Wood
-      const flagColor = isPlayer ? '#166534' : '#b91c1c';
-
-      ctx.save();
-      ctx.translate(x, y);
-      if (!isPlayer) ctx.scale(-1, 1); 
-
-      // --- MAIN FORTRESS BODY ---
-      // Base Block
-      ctx.fillStyle = stoneColor;
-      ctx.fillRect(-80, -120, 140, 120);
-      
-      // Side depth (3D effect)
-      ctx.fillStyle = stoneDark;
-      ctx.beginPath();
-      ctx.moveTo(-80, -120); ctx.lineTo(-95, -110); ctx.lineTo(-95, 0); ctx.lineTo(-80, 0);
-      ctx.fill();
-
-      // Top Battlements (The "teeth")
-      ctx.fillStyle = stoneLight;
-      ctx.fillRect(-85, -135, 150, 15);
-      
-      ctx.fillStyle = stoneDark;
-      // Merlons (The raised parts)
-      for (let i=0; i<5; i++) {
-          ctx.fillRect(-80 + (i * 30), -150, 20, 15);
-      }
-
-      // --- TEXTURE DETAILS (BRICKS) ---
-      ctx.fillStyle = 'rgba(0,0,0,0.1)';
-      for(let r=0; r<5; r++) {
-          for(let c=0; c<4; c++) {
-              if ((r+c)%2===0) ctx.fillRect(-70 + (c * 35), -100 + (r * 20), 25, 10);
-          }
-      }
-
-      // --- GATE ---
-      // Arch
-      ctx.fillStyle = stoneDark;
-      ctx.beginPath();
-      ctx.arc(-10, 0, 45, Math.PI, 0);
-      ctx.fill();
-      
-      // Door
-      ctx.fillStyle = doorColor;
-      ctx.beginPath();
-      ctx.arc(-10, 0, 40, Math.PI, 0);
-      ctx.fill();
-      
-      // Iron Bars
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      for(let i=-40; i<=20; i+=15) {
-          ctx.moveTo(i, 0); ctx.lineTo(i, -35);
-      }
-      ctx.stroke();
-
-      // --- STACKED TOWER SYSTEM ---
-      // Visual: Each tower upgrade adds a floor to the central keep
-      const towers = isPlayer ? engine.playerTowers : engine.enemyTowers;
-      const floorHeight = 40;
-      const startY = -120; // Top of base castle
-
-      if (towers > 0) {
-          for (let i = 0; i < towers; i++) {
-               const currentY = startY - (i * floorHeight);
-               
-               // Tower Floor Body
-               ctx.fillStyle = stoneColor;
-               ctx.fillRect(-50, currentY - floorHeight, 80, floorHeight);
-               
-               // Floor Texture
-               ctx.strokeStyle = stoneDark;
-               ctx.lineWidth = 1;
-               ctx.strokeRect(-50, currentY - floorHeight, 80, floorHeight);
-
-               // Window / Arrow Slit
-               ctx.fillStyle = '#000';
-               ctx.fillRect(-20, currentY - floorHeight + 10, 20, 20);
-
-               // Roof / Overhang for this floor
-               ctx.fillStyle = stoneLight;
-               ctx.beginPath();
-               ctx.moveTo(-60, currentY - floorHeight);
-               ctx.lineTo(40, currentY - floorHeight);
-               ctx.lineTo(-10, currentY - floorHeight - 15); // Peak
-               ctx.fill();
-          }
-
-          // Flag on very top
-          const topY = startY - (towers * floorHeight) - 15;
-          ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.moveTo(-10, topY); ctx.lineTo(-10, topY - 30); ctx.stroke();
-          
-          ctx.fillStyle = flagColor;
-          ctx.beginPath(); 
-          ctx.moveTo(-10, topY - 30);
-          ctx.lineTo(15, topY - 20);
-          ctx.lineTo(-10, topY - 10);
-          ctx.fill();
-      }
-
+      ctx.save(); ctx.translate(x, y); if (!isPlayer) ctx.scale(-1, 1);
+      ctx.fillStyle = '#334155'; ctx.fillRect(-60, -100, 120, 100);
+      ctx.fillStyle = '#1e293b'; ctx.fillRect(-70, -120, 30, 20); ctx.fillRect(-20, -120, 40, 20); ctx.fillRect(40, -120, 30, 20);
+      ctx.fillStyle = '#0f172a'; ctx.beginPath(); ctx.arc(0, 0, 30, Math.PI, 0); ctx.fill();
+      ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(0, -120); ctx.lineTo(0, -160); ctx.stroke();
+      ctx.fillStyle = isPlayer ? '#3b82f6' : '#ef4444'; ctx.beginPath(); ctx.moveTo(0, -160); ctx.lineTo(40, -145); ctx.lineTo(0, -130); ctx.fill();
       ctx.restore();
-  };
-  
-  const drawFogOfWar = (ctx: CanvasRenderingContext2D) => {
-      // Draw a black gradient/rect from playerVisibleX to end of world
-      // This represents what the PLAYER cannot see
-      if (engine.playerVisibleX < WORLD_WIDTH) {
-          const fadeWidth = 200;
-          const startFog = engine.playerVisibleX;
-          
-          const grad = ctx.createLinearGradient(startFog, 0, startFog + fadeWidth, 0);
-          grad.addColorStop(0, 'rgba(0, 0, 0, 0)');
-          grad.addColorStop(1, 'rgba(0, 0, 0, 0.95)'); // Almost pitch black
-          
-          // Fade In Zone
-          ctx.fillStyle = grad;
-          ctx.fillRect(startFog, 0, fadeWidth, CANVAS_HEIGHT);
-          
-          // Solid Black Zone
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
-          ctx.fillRect(startFog + fadeWidth, 0, WORLD_WIDTH - (startFog + fadeWidth), CANVAS_HEIGHT);
-      }
-  };
-
-
-  const drawBackground = (ctx: CanvasRenderingContext2D) => {
-    const grad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    grad.addColorStop(0, theme.skyTop);
-    grad.addColorStop(1, theme.skyBottom);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, WORLD_WIDTH, CANVAS_HEIGHT);
-
-    drawSkyElements(ctx);
-
-    // --- SMOOTH MOUNTAINS ---
-    ctx.fillStyle = theme.mountainColor;
-    ctx.beginPath(); 
-    ctx.moveTo(0, GROUND_Y);
-    
-    // Draw curves for mountains
-    // Control points randomly adjusted for variety but deterministic enough for "static" look per render
-    ctx.bezierCurveTo(300, 100, 500, 300, 800, GROUND_Y);
-    ctx.bezierCurveTo(1100, 50, 1300, 400, 1600, GROUND_Y);
-    ctx.bezierCurveTo(1900, 150, 2200, 300, 2400, GROUND_Y);
-    ctx.bezierCurveTo(2600, 200, 2800, 350, WORLD_WIDTH, GROUND_Y);
-    
-    ctx.lineTo(WORLD_WIDTH, CANVAS_HEIGHT);
-    ctx.lineTo(0, CANVAS_HEIGHT);
-    ctx.fill();
-
-    // --- BETTER GROUND ---
-    ctx.fillStyle = theme.groundColor;
-    ctx.fillRect(0, GROUND_Y, WORLD_WIDTH, CANVAS_HEIGHT - GROUND_Y);
-    
-    // Grass Texture
-    ctx.fillStyle = 'rgba(0,0,0,0.1)';
-    for(let i=0; i<WORLD_WIDTH; i+=20) {
-        if(i % 60 === 0) ctx.fillRect(i, GROUND_Y, 2, 5); // Tall grass
-        else ctx.fillRect(i, GROUND_Y, 2, 2); // Short grass
-    }
-
-    drawEnvironment(ctx);
-    drawHazards(ctx); 
-
-    drawCastle(ctx, PLAYER_BASE_X, GROUND_Y, true);
-    drawCastle(ctx, ENEMY_BASE_X, GROUND_Y, false);
-
-    const drawMine = (x: number, faction: Faction) => {
-        // Fog Check
-        if (faction === Faction.ENEMY && x > engine.playerVisibleX) return;
-
-        ctx.fillStyle = '#4b5563'; ctx.beginPath(); ctx.arc(x, GROUND_Y, 25, Math.PI, 0); ctx.fill();
-        ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.arc(x - 10, GROUND_Y - 10, 3, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(x + 5, GROUND_Y - 15, 4, 0, Math.PI*2); ctx.fill();
-    };
-
-    drawMine(PLAYER_BASE_X + MINING_DISTANCE, Faction.PLAYER);
-    drawMine(ENEMY_BASE_X - MINING_DISTANCE, Faction.ENEMY);
-
-    // Rally Point Flag (Blue)
-    if (engine.rallyPoint !== null) {
-        drawFlag(ctx, engine.rallyPoint, false);
-    }
-    
-    // Patrol Point Flag (Red)
-    if (engine.patrolPoint !== null) {
-        drawFlag(ctx, engine.patrolPoint, true);
-    }
-
-    const pPct = Math.max(0, engine.playerBaseHp / engine.playerMaxBaseHp);
-    const ePct = Math.max(0, engine.enemyBaseHp / engine.enemyMaxBaseHp);
-    
-    // Health Bars (Always visible for Player, check Fog for Enemy)
-    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(PLAYER_BASE_X - 50, GROUND_Y - 180, 100, 10);
-    ctx.fillStyle = '#22c55e'; ctx.fillRect(PLAYER_BASE_X - 50, GROUND_Y - 180, 100 * pPct, 10);
-    
-    if (ENEMY_BASE_X < engine.playerVisibleX + 200) {
-        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(ENEMY_BASE_X - 50, GROUND_Y - 180, 100, 10);
-        ctx.fillStyle = '#ef4444'; ctx.fillRect(ENEMY_BASE_X - 50, GROUND_Y - 180, 100 * ePct, 10);
-    }
   };
 
   const drawProjectiles = (ctx: CanvasRenderingContext2D) => {
       engine.projectiles.forEach(p => {
-          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rotation);
-          
-          if (p.type === 'ARROW') {
-            ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(10, 0); ctx.stroke();
-            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(10, -2); ctx.lineTo(14, 0); ctx.lineTo(10, 2); ctx.fill(); 
-            ctx.fillStyle = '#fca5a5'; ctx.fillRect(-12, -2, 3, 4); 
-          } 
-          else if (p.type === 'TOWER_SHOT') {
-              ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill();
+          if (!p.active) return;
+          if (p.type === 'ARROW' || p.type === 'TOWER_SHOT') {
+              ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rotation);
+              if (p.type === 'TOWER_SHOT') {
+                   ctx.fillStyle = p.faction === Faction.PLAYER ? '#60a5fa' : '#f87171';
+                   ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
+                   ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle; ctx.fill(); ctx.shadowBlur = 0;
+              } else {
+                  ctx.fillStyle = '#fff'; ctx.fillRect(-10, -1, 20, 2); ctx.beginPath(); ctx.moveTo(10, -3); ctx.lineTo(15, 0); ctx.lineTo(10, 3); ctx.fill();
+              }
+              ctx.restore();
+          } else if (p.type === 'LIGHTNING_BOLT' && p.points) {
+               ctx.save(); ctx.strokeStyle = p.faction === Faction.PLAYER ? '#e0f2fe' : '#fecaca';
+               ctx.lineWidth = 3; ctx.shadowBlur = 10; ctx.shadowColor = p.faction === Faction.PLAYER ? '#0ea5e9' : '#ef4444'; ctx.globalAlpha = p.opacity || 1;
+               ctx.beginPath();
+               if (p.points.length > 0) { ctx.moveTo(p.points[0].x, p.points[0].y); for(let i=1; i<p.points.length; i++) { ctx.lineTo(p.points[i].x, p.points[i].y); } }
+               ctx.stroke(); ctx.restore();
           }
-          else if (p.type === 'LIGHTNING_BOLT') {
-              ctx.strokeStyle = '#ffff00';
-              ctx.lineWidth = 3;
-              ctx.shadowColor = '#ffff00';
-              ctx.shadowBlur = 10;
-              ctx.beginPath();
-              ctx.moveTo(0, -400); // Sky
-              ctx.lineTo(0, 0); // Ground
-              ctx.stroke();
-              ctx.shadowBlur = 0;
-          }
-
-          ctx.restore();
       });
-      
-      // Draw Storm Effect
-      if (engine.skillActiveTimers.LIGHTNING > 0) {
-          ctx.save();
-          ctx.fillStyle = `rgba(50, 50, 0, ${0.1 + Math.random() * 0.1})`;
-          ctx.fillRect(0, 0, WORLD_WIDTH, CANVAS_HEIGHT); // Darken sky
-          ctx.restore();
-      }
   };
 
   const drawParticles = (ctx: CanvasRenderingContext2D) => {
       engine.particles.forEach(p => {
-          ctx.globalAlpha = p.life / p.maxLife; ctx.fillStyle = p.color;
-          ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+          ctx.fillStyle = p.color; ctx.globalAlpha = p.life / p.maxLife;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1.0;
       });
   };
-  
+
   const drawFireworks = (ctx: CanvasRenderingContext2D) => {
-      engine.fireworks.forEach(fw => {
-          if (!fw.exploded) {
-              // Draw rising trail?
-          } else {
-              fw.particles.forEach(p => {
-                  ctx.globalAlpha = p.life / p.maxLife; ctx.fillStyle = p.color;
-                  ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
-                  ctx.globalAlpha = 1;
-              });
-          }
-      });
+       engine.fireworks.forEach(fw => {
+           if (!fw.exploded) { ctx.fillStyle = fw.color; ctx.fillRect(fw.x - 2, fw.y - 2, 4, 4); } else {
+               fw.particles.forEach(p => { ctx.fillStyle = p.color; ctx.globalAlpha = p.life / p.maxLife; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill(); });
+               ctx.globalAlpha = 1;
+           }
+       });
+  };
+
+  const drawBackground = (ctx: CanvasRenderingContext2D) => {
+    // 1. Static Sky
+    const grad = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+    grad.addColorStop(0, theme.skyTop);
+    grad.addColorStop(1, theme.skyBottom);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, WORLD_WIDTH, GROUND_Y);
+    
+    drawSkyElements(ctx);
+    
+    // 2. Static Mountains (from useMemo data)
+    ctx.fillStyle = theme.mountainColor;
+    ctx.beginPath();
+    ctx.moveTo(0, GROUND_Y);
+    staticBg.mountainPoints.forEach(pt => ctx.lineTo(pt.x, GROUND_Y - pt.h));
+    ctx.lineTo(WORLD_WIDTH, GROUND_Y);
+    ctx.closePath();
+    ctx.save(); ctx.fill(); ctx.clip(); 
+
+    // 3. Static Details (Clipped to Mountain)
+    // REMOVED VINES LOGIC HERE
+    
+    // Snow Caps
+    if (biome === 3 || biome === 10) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, WORLD_WIDTH, GROUND_Y - 250); }
+
+    // Desert Strata
+    if (biome === 2 || biome === 9) {
+        ctx.fillStyle = 'rgba(0,0,0,0.1)';
+        for(let y=GROUND_Y - 300; y<GROUND_Y; y+=20) { ctx.fillRect(0, y, WORLD_WIDTH, 5); }
+    }
+    ctx.restore(); 
+    
+    // 4. Static Ground
+    const groundGrad = ctx.createLinearGradient(0, GROUND_Y, 0, CANVAS_HEIGHT);
+    groundGrad.addColorStop(0, theme.groundColor);
+    groundGrad.addColorStop(1, '#0f172a'); 
+    ctx.fillStyle = groundGrad;
+    ctx.fillRect(0, GROUND_Y, WORLD_WIDTH, CANVAS_HEIGHT - GROUND_Y);
+
+    // River (Static Shape)
+    if (biome === 0) {
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.moveTo(0, GROUND_Y + 40);
+        for(let x=0; x<=WORLD_WIDTH; x+=50) { ctx.lineTo(x, GROUND_Y + 40 + Math.sin(x * 0.01) * 15); }
+        ctx.lineTo(WORLD_WIDTH, GROUND_Y + 80);
+        for(let x=WORLD_WIDTH; x>=0; x-=50) { ctx.lineTo(x, GROUND_Y + 80 + Math.sin(x * 0.01) * 15); }
+        ctx.fill();
+    }
+    // Cracks (Static Lines)
+    if (biome === 2 || biome === 5 || biome === 11) {
+        ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 2;
+        staticBg.cracks.forEach(crack => {
+            ctx.beginPath(); ctx.moveTo(crack.x, crack.y);
+            crack.path.forEach(p => ctx.lineTo(crack.x + p.x, crack.y + p.y));
+            ctx.stroke();
+        });
+    }
+    
+    // Static Ground Texture
+    ctx.fillStyle = 'rgba(0,0,0,0.1)';
+    for(let i=0; i<WORLD_WIDTH; i+=50) { if (i % 100 === 0) ctx.fillRect(i, GROUND_Y, 50, CANVAS_HEIGHT - GROUND_Y); }
+    
+    drawEnvironment(ctx); // Animated Clouds/Birds
+    
+    drawGoldMine(ctx, PLAYER_BASE_X + MINING_DISTANCE, true);
+    drawGoldMine(ctx, ENEMY_BASE_X - MINING_DISTANCE, false);
+
+    drawCastle(ctx, PLAYER_BASE_X, GROUND_Y, true);
+    drawCastleHP(ctx, PLAYER_BASE_X, engine.playerBaseHp, engine.playerMaxBaseHp);
+
+    drawCastle(ctx, ENEMY_BASE_X, GROUND_Y, false);
+    drawCastleHP(ctx, ENEMY_BASE_X, engine.enemyBaseHp, engine.enemyMaxBaseHp);
+  };
+  
+  const drawFogOfWar = (ctx: CanvasRenderingContext2D) => {
+      const visX = engine.playerVisibleX;
+      if (visX >= WORLD_WIDTH) return;
+      
+      const fade = 300;
+      const grad = ctx.createLinearGradient(visX, 0, visX + fade, 0);
+      grad.addColorStop(0, 'rgba(0,0,0,0)');
+      grad.addColorStop(1, 'rgba(0,0,0,0.5)'); // Semi-transparent black for Fog
+
+      ctx.fillStyle = grad;
+      ctx.fillRect(visX, 0, fade, CANVAS_HEIGHT);
+      
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(visX + fade, 0, WORLD_WIDTH - (visX + fade), CANVAS_HEIGHT);
   };
 
   useEffect(() => {
@@ -698,22 +610,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-
     let animationId: number;
 
     const render = () => {
       engine.update();
-
       ctx.save();
-      
       let shakeX = 0, shakeY = 0;
-      if (engine.screenShake > 0) {
-          shakeX = (Math.random() - 0.5) * engine.screenShake;
-          shakeY = (Math.random() - 0.5) * engine.screenShake;
-      }
-      
+      if (engine.screenShake > 0) { shakeX = (Math.random() - 0.5) * engine.screenShake; shakeY = (Math.random() - 0.5) * engine.screenShake; }
       ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-      ctx.translate(-cameraX + shakeX, shakeY);
+      ctx.translate(-cameraXRef.current + shakeX, shakeY);
 
       drawBackground(ctx);
       
@@ -724,122 +629,55 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
       });
 
       sortedUnits.forEach(unit => drawStickman(ctx, unit));
+      drawHazards(ctx); 
       drawProjectiles(ctx);
       drawParticles(ctx);
       drawFireworks(ctx);
-      
-      // Fog of War (Draw last to cover everything)
       drawFogOfWar(ctx);
 
-      // Skill Reticles (World Coordinates)
-      if (targetingSkill === 'ARROW_RAIN') {
-        ctx.strokeStyle = '#fbbf24'; ctx.setLineDash([5, 5]);
-        ctx.beginPath(); ctx.arc(hoverX, GROUND_Y, 150, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = 'rgba(251, 191, 36, 0.2)'; ctx.fill(); ctx.setLineDash([]);
-      }
-      if (targetingSkill === 'LIGHTNING') {
-        ctx.strokeStyle = '#ffff00'; ctx.setLineDash([2, 8]);
-        ctx.beginPath(); ctx.arc(hoverX, GROUND_Y, 150, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = 'rgba(255, 255, 0, 0.2)'; ctx.fill(); ctx.setLineDash([]);
-      }
-      if (targetingSkill === 'FREEZE') {
-        ctx.strokeStyle = '#3b82f6'; ctx.setLineDash([2, 2]);
-        ctx.beginPath(); ctx.arc(hoverX, GROUND_Y, 200, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = 'rgba(59, 130, 246, 0.2)'; ctx.fill(); ctx.setLineDash([]);
-      }
-      
-      // Patrol Flag Reticle
-      if (targetingSkill === 'SET_PATROL') {
-          drawFlag(ctx, hoverX, true); // Ghost red flag
-      }
-      
+      if (targetingSkill === 'ARROW_RAIN') { ctx.strokeStyle = '#fbbf24'; ctx.setLineDash([5, 5]); ctx.beginPath(); ctx.arc(hoverX, GROUND_Y, 150, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = 'rgba(251, 191, 36, 0.2)'; ctx.fill(); ctx.setLineDash([]); }
+      if (targetingSkill === 'LIGHTNING') { ctx.strokeStyle = '#ffff00'; ctx.setLineDash([2, 8]); ctx.beginPath(); ctx.arc(hoverX, GROUND_Y, 150, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = 'rgba(255, 255, 0, 0.2)'; ctx.fill(); ctx.setLineDash([]); }
+      if (targetingSkill === 'FREEZE') { ctx.strokeStyle = '#3b82f6'; ctx.setLineDash([2, 2]); ctx.beginPath(); ctx.arc(hoverX, GROUND_Y, 200, 0, Math.PI * 2); ctx.stroke(); ctx.fillStyle = 'rgba(59, 130, 246, 0.2)'; ctx.fill(); ctx.setLineDash([]); }
+      if (targetingSkill === 'SET_PATROL') drawFlag(ctx, hoverX, 'RED'); 
+      if (targetingSkill === 'SET_RALLY') drawFlag(ctx, hoverX, 'BLUE');
+      if (engine.rallyPoint !== null) drawFlag(ctx, engine.rallyPoint, 'BLUE');
+      if (engine.patrolPoint !== null) drawFlag(ctx, engine.patrolPoint, 'RED');
       ctx.restore(); 
-
       animationId = requestAnimationFrame(render);
     };
-
     render();
-
     return () => cancelAnimationFrame(animationId);
-  }, [engine, targetingSkill, hoverX, theme, cameraX]);
+  }, [engine, targetingSkill, hoverX, theme, staticBg]); 
 
-  // --- CAMERA INPUT HANDLING ---
-
-  const handleStart = (clientX: number) => {
-    setIsDragging(true);
-    setLastMouseX(clientX);
-  };
-
+  // Input Handling...
+  const handleStart = (clientX: number) => { setIsDragging(true); setLastMouseX(clientX); };
   const handleMove = (clientX: number, rect: DOMRect) => {
-    // Correct mouse position for the wider aspect ratio
     const scaleX = CANVAS_WIDTH / rect.width;
     const mouseCanvasX = (clientX - rect.left) * scaleX;
     setHoverX(mouseCanvasX + cameraX);
-
     if (isDragging) {
         const delta = (clientX - lastMouseX) * scaleX;
-        setCameraX(prev => {
-            const next = prev - delta;
-            return Math.max(0, Math.min(next, WORLD_WIDTH - CANVAS_WIDTH));
-        });
+        setCameraX(prev => Math.max(0, Math.min(prev - delta, WORLD_WIDTH - CANVAS_WIDTH)));
         setLastMouseX(clientX);
     }
   };
-
   const handleEnd = (clientX: number, clientY: number, rect: DOMRect) => {
+    const wasDragging = Math.abs(clientX - lastMouseX) > 5 && isDragging;
     setIsDragging(false);
-    
+    if (wasDragging) return;
     const scaleX = CANVAS_WIDTH / rect.width;
     const scaleY = CANVAS_HEIGHT / rect.height;
-
     const mouseCanvasX = (clientX - rect.left) * scaleX;
     const mouseCanvasY = (clientY - rect.top) * scaleY;
+    if (!targetingSkill && mouseCanvasY < GROUND_Y - 50) return;
     const clickX = mouseCanvasX + cameraX;
     
-    // Skill usage logic
-    if (targetingSkill === 'ARROW_RAIN') {
-        engine.useSkillArrowRain(clickX);
-        onSkillUsed();
-    } else if (targetingSkill === 'LIGHTNING') {
-        engine.useSkillLightning(clickX);
-        onSkillUsed();
-    } else if (targetingSkill === 'FREEZE') {
-        engine.useSkillFreeze(clickX);
-        onSkillUsed();
-    } else if (targetingSkill === 'SET_PATROL') {
-        engine.setPatrolPoint(clickX);
-        onSkillUsed();
-    } else {
-        if (mouseCanvasY > 350) {
-            engine.setRallyPoint(clickX);
-        }
-    }
-  };
-
-  // Mouse Handlers
-  const handleMouseDown = (e: React.MouseEvent) => handleStart(e.clientX);
-  const handleMouseMove = (e: React.MouseEvent) => {
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if(rect) handleMove(e.clientX, rect);
-  };
-  const handleMouseUp = (e: React.MouseEvent) => {
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if(rect) handleEnd(e.clientX, e.clientY, rect);
-  };
-  const handleMouseLeave = () => setIsDragging(false);
-
-  // Touch Handlers (Mobile)
-  const handleTouchStart = (e: React.TouchEvent) => handleStart(e.touches[0].clientX);
-  const handleTouchMove = (e: React.TouchEvent) => {
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if(rect) handleMove(e.touches[0].clientX, rect);
-  };
-  const handleTouchEnd = (e: React.TouchEvent) => {
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if(rect && e.changedTouches.length > 0) {
-          const t = e.changedTouches[0];
-          handleEnd(t.clientX, t.clientY, rect);
-      }
+    if (targetingSkill === 'ARROW_RAIN') { engine.useSkillArrowRain(clickX); onSkillUsed(); } 
+    else if (targetingSkill === 'LIGHTNING') { engine.useSkillLightning(clickX); onSkillUsed(); } 
+    else if (targetingSkill === 'FREEZE') { engine.useSkillFreeze(clickX); onSkillUsed(); } 
+    else if (targetingSkill === 'SET_PATROL') { engine.setPatrolPoint(clickX); onSkillUsed(); } 
+    else if (targetingSkill === 'SET_RALLY') { engine.setRallyPoint(clickX); onSkillUsed(); } 
+    else { engine.setRallyPoint(clickX); onSkillUsed(); }
   };
 
   return (
@@ -849,13 +687,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
         width={CANVAS_WIDTH}
         height={CANVAS_HEIGHT}
         className={`w-full border-4 border-slate-700 shadow-2xl bg-black ${targetingSkill ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseLeave}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        onMouseDown={(e) => handleStart(e.clientX)}
+        onMouseMove={(e) => { const r = canvasRef.current?.getBoundingClientRect(); if(r) handleMove(e.clientX, r); }}
+        onMouseUp={(e) => { const r = canvasRef.current?.getBoundingClientRect(); if(r) handleEnd(e.clientX, e.clientY, r); }}
+        onMouseLeave={() => setIsDragging(false)}
+        onTouchStart={(e) => handleStart(e.touches[0].clientX)}
+        onTouchMove={(e) => { const r = canvasRef.current?.getBoundingClientRect(); if(r) handleMove(e.touches[0].clientX, r); }}
+        onTouchEnd={(e) => { const r = canvasRef.current?.getBoundingClientRect(); if(r && e.changedTouches.length) handleEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY, r); }}
         />
         <div className="absolute top-2 left-2 bg-black/50 text-white px-2 py-1 text-xs rounded pointer-events-none">
             {theme.nameVn} - Tap Ground to Flag / Drag Sky to Scroll

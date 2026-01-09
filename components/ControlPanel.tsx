@@ -21,8 +21,11 @@ interface ControlPanelProps {
   onUseSkill: (skill: string) => void;
   activeSkill: string | null;
   rallyPointSet: boolean;
-  patrolPointSet: boolean; // New
-  onSetStrategy: (strategy: 'CHARGE' | 'DEFEND' | 'PATROL') => void; // Updated
+  patrolPointSet: boolean;
+  vanguardPointSet: boolean; 
+  vanguardPercentage: number; 
+  onSetVanguardPct: (pct: number) => void; 
+  onSetStrategy: (strategy: 'CHARGE' | 'DEFEND' | 'PATROL' | 'VANGUARD') => void; 
   onBuyPopUpgrade: () => void;
   onBuyPassiveGoldUpgrade: () => void;
   onBuyTower: () => void; 
@@ -161,12 +164,11 @@ const SkillButton: React.FC<{
     );
 };
 
-const ControlPanel: React.FC<ControlPanelProps> = ({ gold, population, maxPopulation, heroPopulation, unitCounts, spawnQueue, onBuyUnit, onDismissUnit, onUseSkill, activeSkill, rallyPointSet, patrolPointSet, onSetStrategy, onBuyPopUpgrade, onBuyPassiveGoldUpgrade, onBuyTower, towerCount, passiveGoldLevel, cooldowns, activeTimers, maxDurations, lang }) => {
+const ControlPanel: React.FC<ControlPanelProps> = ({ gold, population, maxPopulation, heroPopulation, unitCounts, spawnQueue, onBuyUnit, onDismissUnit, onUseSkill, activeSkill, rallyPointSet, patrolPointSet, vanguardPointSet, vanguardPercentage, onSetVanguardPct, onSetStrategy, onBuyPopUpgrade, onBuyPassiveGoldUpgrade, onBuyTower, towerCount, passiveGoldLevel, cooldowns, activeTimers, maxDurations, lang }) => {
   const isPopFull = population >= maxPopulation;
   const isHeroFull = heroPopulation >= MAX_HEROES;
   const maxPopReached = maxPopulation >= (MAX_POPULATION + MAX_POP_UPGRADES);
   
-  // Update Income Display Logic: Base 1 + (Level * 2)
   const currentIncome = 1 + (passiveGoldLevel * 2);
   const isPassiveGoldMax = passiveGoldLevel >= MAX_PASSIVE_GOLD_LEVEL; 
   
@@ -282,31 +284,59 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ gold, population, maxPopula
               {/* Strategy Control */}
               <div className="bg-slate-800 p-2 rounded shadow border border-slate-600 flex-1 md:flex-none">
                  <h3 className="text-slate-300 font-bold mb-1 uppercase text-xs tracking-wider">{t.tactics}</h3>
-                 <div className="flex gap-1 h-full items-center justify-center">
+                 <div className="grid grid-cols-2 grid-rows-2 gap-1 h-full w-full md:w-48">
                      
-                     {/* CHARGE */}
+                     {/* 1. CHARGE (Attacks & CLEARS Flag) */}
                      <button
                         onClick={() => onSetStrategy('CHARGE')}
-                        className={`flex-1 py-4 px-4 text-sm rounded border font-bold transition-all min-w-[60px] h-20
-                            ${!rallyPointSet && activeSkill !== 'SET_RALLY' && activeSkill !== 'SET_PATROL'
+                        className={`py-1 px-1 text-sm rounded border font-bold transition-all
+                            ${!rallyPointSet && !vanguardPointSet && activeSkill !== 'SET_PATROL'
                                 ? 'bg-red-600 border-red-400 text-white shadow-red-900/50 shadow' 
                                 : 'bg-slate-700 border-slate-500 text-slate-300 hover:bg-slate-600'}`}
                      >
-                         <div className="text-xl">⚔️</div>
-                         <div className="text-[10px] hidden md:block">{t.charge}</div>
+                         <div className="text-sm">⚔️ {t.charge}</div>
                      </button>
-
-                     {/* PATROL (New) */}
+                     
+                     {/* 2. PATROL */}
                      <button
                         onClick={() => onSetStrategy('PATROL')}
-                        className={`flex-1 py-4 px-4 text-sm rounded border font-bold transition-all min-w-[60px] h-20
+                        className={`py-1 px-1 text-sm rounded border font-bold transition-all
                             ${patrolPointSet || activeSkill === 'SET_PATROL'
                                 ? 'bg-orange-600 border-orange-400 text-white shadow-orange-900/50 shadow' 
                                 : 'bg-slate-700 border-slate-500 text-slate-300 hover:bg-slate-600'}`}
                      >
-                         <div className="text-xl">🚩</div>
-                         <div className="text-[10px] hidden md:block">{t.patrol}</div>
+                         <div className="text-sm">🚩 {t.patrol}</div>
                      </button>
+
+                     {/* 3. VANGUARD / PRESSURE CONTROL */}
+                     <div className={`col-span-2 rounded border flex flex-col items-center justify-center p-0.5 transition-all relative overflow-hidden
+                         ${vanguardPercentage > 0 
+                            ? 'bg-green-700 border-green-500 shadow-green-900/50 shadow' 
+                            : 'bg-slate-700 border-slate-500'}`}
+                     >
+                         <div className="text-[8px] font-bold text-slate-200 uppercase tracking-tight mb-0.5">PRESSURE</div>
+                         <div className="flex items-center justify-between w-full px-1">
+                             <button 
+                                onClick={() => onSetVanguardPct(Math.max(0, vanguardPercentage - 0.1))}
+                                className="w-5 h-5 bg-black/30 hover:bg-black/50 rounded flex items-center justify-center text-xs text-white"
+                             >
+                                 -
+                             </button>
+                             <span className="font-mono text-sm font-bold text-white w-8 text-center">
+                                 {Math.round(vanguardPercentage * 100)}%
+                             </span>
+                             <button 
+                                onClick={() => onSetVanguardPct(Math.min(0.5, vanguardPercentage + 0.1))}
+                                className="w-5 h-5 bg-black/30 hover:bg-black/50 rounded flex items-center justify-center text-xs text-white"
+                             >
+                                 +
+                             </button>
+                         </div>
+                         {/* Visual bar at bottom */}
+                         <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/30">
+                             <div className="h-full bg-green-400 transition-all" style={{width: `${vanguardPercentage * 200}%`}}></div>
+                         </div>
+                     </div>
 
                  </div>
               </div>

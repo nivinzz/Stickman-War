@@ -91,14 +91,32 @@ const UpgradeMenu: React.FC<UpgradeMenuProps> = ({ upgrades, gold, onUpgrade, la
       const cost = getCost(level);
       const globalLimit = MAX_UPGRADE_LEVELS[key] || 99; 
       
-      // --- PROGRESS GATING LOGIC ---
-      // Primary units (Sword, Archer, Cav): Limit = maxReachedLevel
-      // Secondary (Base, Tower, Hero, etc): Limit = Math.ceil(maxReachedLevel / 2.5)
+      // --- NEW GATING LOGIC (3 TIERS) ---
+      // Tier 1: Maps 1-20
+      // Tier 2: Maps 21-40
+      // Tier 3: Maps 41-60
       
-      const isPrimary = key === 'swordDamage' || key === 'archerDamage' || key === 'cavalryDamage';
-      const progressCap = isPrimary ? maxReachedLevel : Math.ceil(maxReachedLevel * 0.4); 
+      const isPrimaryUnit = key === 'swordDamage' || key === 'archerDamage' || key === 'cavalryDamage';
       
-      // The effective limit is the smaller of the Game Global Limit and the Player Progress Limit
+      let progressCap = 0;
+      let requiredMap = 0;
+
+      // Tier Calculation based on Max Reached Level
+      // Tier 1 (1-20): Units Cap 10, Others Cap 7
+      // Tier 2 (21-40): Units Cap 20, Others Cap 14
+      // Tier 3 (41-60): Units Cap 30, Others Cap 20
+      
+      if (maxReachedLevel <= 20) {
+          progressCap = isPrimaryUnit ? 10 : 7;
+          requiredMap = 21;
+      } else if (maxReachedLevel <= 40) {
+          progressCap = isPrimaryUnit ? 20 : 14;
+          requiredMap = 41;
+      } else {
+          progressCap = isPrimaryUnit ? 30 : 20; // Max
+          requiredMap = 61; // Maxed out
+      }
+      
       const effectiveLimit = Math.min(globalLimit, progressCap);
       const isMax = level >= globalLimit;
       const isGated = level >= effectiveLimit && !isMax;
@@ -128,7 +146,7 @@ const UpgradeMenu: React.FC<UpgradeMenuProps> = ({ upgrades, gold, onUpgrade, la
                             </span>
                             {isGated && (
                                 <span className="text-[9px] text-red-500 font-bold border border-red-900 px-1 rounded bg-black/40">
-                                    LOCKED (Req Map {isPrimary ? effectiveLimit + 1 : Math.ceil((level + 1) * 2.5)})
+                                    LOCKED (Req Map {requiredMap})
                                 </span>
                             )}
                         </div>

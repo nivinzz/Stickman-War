@@ -9,7 +9,7 @@ export const GROUND_Y = 500;
 
 export const MAX_POPULATION = 25; // Base max is 25
 export const MAX_HEROES = 5;      
-export const MAX_LEVEL = 50;
+export const MAX_LEVEL = 60; // Increased to 60
 
 export const POP_UPGRADE_COST = 2000;
 export const MAX_POP_UPGRADES = 5; // Buy 5 times -> Total 30
@@ -49,19 +49,21 @@ export const UNIT_CONFIG: Record<UnitType, UnitStats> = {
   [UnitType.HERO]: { hp: 1200, maxHp: 1200, damage: 80, range: 70, speed: 2.0, attackSpeed: 40, cost: 1000, spawnTime: 600 },
 };
 
-// Max Levels for Upgrade Menu
+// Max Levels for Upgrade Menu (Aligned with new Gating System)
+// Units: Max 30 (10 per tier)
+// Others: Max 20 (7-7-6 split)
 export const MAX_UPGRADE_LEVELS: Partial<Record<keyof UpgradeState, number>> = {
     baseHp: 20,
     towerPower: 20,
-    heroPower: 10,  
-    minerSpeed: 15, 
-    spawnSpeed: 10, 
-    arrowRainPower: 15, 
-    lightningPower: 15,
-    freezePower: 15,
-    swordDamage: 50, 
-    archerDamage: 50,
-    cavalryDamage: 50,
+    heroPower: 20,  
+    minerSpeed: 20, 
+    spawnSpeed: 20, 
+    arrowRainPower: 20, 
+    lightningPower: 20,
+    freezePower: 20,
+    swordDamage: 30, 
+    archerDamage: 30,
+    cavalryDamage: 30,
 };
 
 export const SKILL_COOLDOWNS_FRAMES = {
@@ -104,23 +106,33 @@ export const calculateUnitStats = (type: UnitType, upgradeLevel: number): UnitSt
     return stats;
 };
 
-// Loop themes for 50 levels
+// Loop themes for 60 levels
+// treeTrunk, treeLeaf1, treeLeaf2 allow for varied environments
 export const LEVEL_THEMES: LevelTheme[] = [
-  { skyTop: '#38bdf8', skyBottom: '#bae6fd', mountainColor: '#64748b', groundColor: '#166534', nameEn: "Green Valley", nameVn: "Thung Lũng Xanh" },
-  { skyTop: '#7dd3fc', skyBottom: '#e0f2fe', mountainColor: '#94a3b8', groundColor: '#15803d', nameEn: "River Crossing", nameVn: "Bến Sông" },
-  { skyTop: '#c026d3', skyBottom: '#f97316', mountainColor: '#475569', groundColor: '#3f6212', nameEn: "Sunset Hills", nameVn: "Đồi Hoàng Hôn" },
-  { skyTop: '#db2777', skyBottom: '#fb923c', mountainColor: '#57534e', groundColor: '#4d7c0f', nameEn: "Autumn Forest", nameVn: "Rừng Thu" },
-  { skyTop: '#0f172a', skyBottom: '#312e81', mountainColor: '#1e293b', groundColor: '#0f172a', nameEn: "Midnight Peak", nameVn: "Đỉnh Núi Đêm" },
-  { skyTop: '#1e1b4b', skyBottom: '#4338ca', mountainColor: '#334155', groundColor: '#1e293b', nameEn: "Moonlight Path", nameVn: "Đường Trăng" },
-  { skyTop: '#78350f', skyBottom: '#fcd34d', mountainColor: '#713f12', groundColor: '#451a03', nameEn: "Dusty Canyon", nameVn: "Hẻm Núi Bụi" },
-  { skyTop: '#a16207', skyBottom: '#fef08a', mountainColor: '#854d0e', groundColor: '#713f12', nameEn: "Sandstorm Desert", nameVn: "Sa Mạc Bão Cát" },
-  { skyTop: '#3f3f46', skyBottom: '#a1a1aa', mountainColor: '#27272a', groundColor: '#52525b', nameEn: "Iron Wasteland", nameVn: "Vùng Đất Sắt" },
-  { skyTop: '#18181b', skyBottom: '#52525b', mountainColor: '#09090b', groundColor: '#3f3f46', nameEn: "Dark Fortress", nameVn: "Pháo Đài Đen" },
-  { skyTop: '#450a0a', skyBottom: '#ef4444', mountainColor: '#000000', groundColor: '#280505', nameEn: "Inferno Gate", nameVn: "Cổng Địa Ngục" },
-  { skyTop: '#7f1d1d', skyBottom: '#f87171', mountainColor: '#450a0a', groundColor: '#450a0a', nameEn: "Blood Plains", nameVn: "Cánh Đồng Máu" },
-  { skyTop: '#312e81', skyBottom: '#4c1d95', mountainColor: '#1e1b4b', groundColor: '#2e1065', nameEn: "Void Dimension", nameVn: "Hư Không" },
-  { skyTop: '#111827', skyBottom: '#000000', mountainColor: '#1f2937', groundColor: '#000000', nameEn: "The Abyss", nameVn: "Vực Thẳm" },
-  { skyTop: '#ffffff', skyBottom: '#d1d5db', mountainColor: '#9ca3af', groundColor: '#f3f4f6', nameEn: "Heaven's End", nameVn: "Tận Cùng Thiên Giới" },
+  // 1-5: Classic Green
+  { skyTop: '#38bdf8', skyBottom: '#bae6fd', mountainColor: '#64748b', groundColor: '#166534', treeTrunk: '#451a03', treeLeaf1: '#166534', treeLeaf2: '#15803d', nameEn: "Green Valley", nameVn: "Thung Lũng Xanh" },
+  // 6-10: Autumn
+  { skyTop: '#db2777', skyBottom: '#fb923c', mountainColor: '#57534e', groundColor: '#4d7c0f', treeTrunk: '#3f2c22', treeLeaf1: '#d97706', treeLeaf2: '#b45309', nameEn: "Autumn Forest", nameVn: "Rừng Thu" },
+  // 11-15: Desert
+  { skyTop: '#78350f', skyBottom: '#fcd34d', mountainColor: '#713f12', groundColor: '#ca8a04', treeTrunk: '#9a3412', treeLeaf1: '#65a30d', treeLeaf2: '#3f6212', nameEn: "Dusty Canyon", nameVn: "Hẻm Núi Bụi" },
+  // 16-20: Snow/Winter
+  { skyTop: '#bae6fd', skyBottom: '#f0f9ff', mountainColor: '#cbd5e1', groundColor: '#e2e8f0', treeTrunk: '#475569', treeLeaf1: '#f1f5f9', treeLeaf2: '#94a3b8', nameEn: "Frozen Peaks", nameVn: "Đỉnh Tuyết" },
+  // 21-25: Night/Mystic
+  { skyTop: '#1e1b4b', skyBottom: '#4338ca', mountainColor: '#334155', groundColor: '#1e293b', treeTrunk: '#0f172a', treeLeaf1: '#312e81', treeLeaf2: '#4f46e5', nameEn: "Moonlight Path", nameVn: "Đường Trăng" },
+  // 26-30: Volcanic
+  { skyTop: '#450a0a', skyBottom: '#ef4444', mountainColor: '#1c1917', groundColor: '#280505', treeTrunk: '#292524', treeLeaf1: '#7f1d1d', treeLeaf2: '#b91c1c', nameEn: "Inferno Gate", nameVn: "Cổng Địa Ngục" },
+  // 31-35: Cherry Blossom
+  { skyTop: '#fbcfe8', skyBottom: '#fff1f2', mountainColor: '#f472b6', groundColor: '#16a34a', treeTrunk: '#5b21b6', treeLeaf1: '#f9a8d4', treeLeaf2: '#f472b6', nameEn: "Sakura Hills", nameVn: "Đồi Hoa Anh Đào" },
+  // 36-40: Dark/Dead
+  { skyTop: '#18181b', skyBottom: '#52525b', mountainColor: '#09090b', groundColor: '#3f3f46', treeTrunk: '#000000', treeLeaf1: '#27272a', treeLeaf2: '#3f3f46', nameEn: "Dead Lands", nameVn: "Vùng Đất Chết" },
+  // 41-45: Alien/Void
+  { skyTop: '#312e81', skyBottom: '#4c1d95', mountainColor: '#1e1b4b', groundColor: '#2e1065', treeTrunk: '#c026d3', treeLeaf1: '#a855f7', treeLeaf2: '#7e22ce', nameEn: "Void Dimension", nameVn: "Hư Không" },
+  // 46-50: Golden
+  { skyTop: '#fef9c3', skyBottom: '#facc15', mountainColor: '#854d0e', groundColor: '#713f12', treeTrunk: '#78350f', treeLeaf1: '#facc15', treeLeaf2: '#ca8a04', nameEn: "Golden Realm", nameVn: "Vùng Đất Vàng" },
+  // 51-55: Sky/Heaven
+  { skyTop: '#ffffff', skyBottom: '#d1d5db', mountainColor: '#9ca3af', groundColor: '#f3f4f6', treeTrunk: '#e5e7eb', treeLeaf1: '#38bdf8', treeLeaf2: '#0ea5e9', nameEn: "Heaven's End", nameVn: "Thiên Giới" },
+  // 56-60: Chaos
+  { skyTop: '#000000', skyBottom: '#dc2626', mountainColor: '#2d0a0a', groundColor: '#450a0a', treeTrunk: '#000000', treeLeaf1: '#991b1b', treeLeaf2: '#ef4444', nameEn: "Chaos Origin", nameVn: "Cội Nguồn Hỗn Mang" },
 ];
 
 export const getTheme = (level: number): LevelTheme => {

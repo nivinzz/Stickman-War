@@ -20,7 +20,8 @@ export enum UnitState {
   MINE_GATHERING = 'MINE_GATHERING',
   MINE_RETURN = 'MINE_RETURN',
   DIE = 'DIE',     
-  DEAD = 'DEAD'    
+  DEAD = 'DEAD',
+  RETREAT = 'RETREAT' // AI Specific state
 }
 
 export interface UnitStats {
@@ -54,6 +55,9 @@ export interface Unit {
   
   // Patrol State
   patrolHeading?: 'A' | 'B'; // A = Rally Point (Blue), B = Patrol Point (Red)
+  
+  // Vanguard State
+  isVanguard?: boolean; // If true, follows Green Flag
 
   // Status Effects
   freezeTimer: number; // Keep for lingering slow if needed
@@ -62,6 +66,13 @@ export interface Unit {
   rotation: number; 
   deathTimer: number; 
   opacity: number;
+}
+
+export interface IceShard {
+    x: number;
+    height: number;
+    width: number;
+    tilt: number;
 }
 
 export interface Hazard {
@@ -75,6 +86,7 @@ export interface Hazard {
     damagePercent: number; // % Max HP per second
     slowFactor: number; // Speed multiplier (e.g., 0.5)
     faction: Faction; // Added to check for friendly fire
+    visuals?: IceShard[]; // Visual data for ice spikes
 }
 
 export interface SpawnQueueItem {
@@ -97,6 +109,8 @@ export interface Projectile {
   active: boolean;
   type: 'ARROW' | 'LIGHTNING_BOLT' | 'TOWER_SHOT'; 
   rotation: number;
+  points?: {x: number, y: number}[]; // For Lightning zigzag
+  opacity?: number; // For fading effects
 }
 
 export interface Particle {
@@ -137,6 +151,9 @@ export interface LevelTheme {
   skyBottom: string;
   mountainColor: string;
   groundColor: string;
+  treeTrunk: string;
+  treeLeaf1: string; // Primary leaf color
+  treeLeaf2: string; // Secondary/highlight leaf color
   nameEn: string;
   nameVn: string;
 }

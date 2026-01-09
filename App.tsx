@@ -11,8 +11,6 @@ const App: React.FC = () => {
   const [gameState, setGameState] = useState<'MENU' | 'LEVEL_SELECT' | 'PLAYING' | 'VICTORY' | 'DEFEAT'>('MENU');
   
   // --- ROBUST SAVE SYSTEM (LAZY INIT) ---
-  // Read LocalStorage IMMEDIATELY upon state creation to prevent overwrite bugs
-  
   const [maxReachedLevel, setMaxReachedLevel] = useState<number>(() => {
       try {
           const saved = localStorage.getItem('stickman_max_level');
@@ -57,13 +55,17 @@ const App: React.FC = () => {
   const [spawnQueue, setSpawnQueue] = useState<SpawnQueueItem[]>([]);
   
   const [activeSkill, setActiveSkill] = useState<string | null>(null);
+  
+  // Strategy States
   const [rallyPointSet, setRallyPointSet] = useState(false);
-  const [patrolPointSet, setPatrolPointSet] = useState(false); // New State
+  const [patrolPointSet, setPatrolPointSet] = useState(false);
+  const [vanguardPointSet, setVanguardPointSet] = useState(false);
+  const [vanguardPercentage, setVanguardPercentage] = useState(0.2);
   
   const [cooldowns, setCooldowns] = useState({ ARROW_RAIN: 0, LIGHTNING: 0, FREEZE: 0 });
   const [activeTimers, setActiveTimers] = useState({ ARROW_RAIN: 0, LIGHTNING: 0, FREEZE: 0 });
   const [maxDurations, setMaxDurations] = useState({ ARROW_RAIN: 0, LIGHTNING: 0, FREEZE: 0 });
-  const [timeElapsed, setTimeElapsed] = useState(0); // For UI display
+  const [timeElapsed, setTimeElapsed] = useState(0); 
 
   const [paused, setPaused] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
@@ -75,8 +77,6 @@ const App: React.FC = () => {
   };
 
   const saveUpgradesOnly = (currentUpgrades: UpgradeState) => {
-      // Do not save session-based upgrades (MaxPop and PassiveGold)
-      // This ensures we only keep PERMANENT upgrades in the save file
       const storageUpgrades = {
           ...currentUpgrades,
           maxPopUpgrade: 0,
@@ -96,7 +96,6 @@ const App: React.FC = () => {
       setGold(Math.floor(eng.gold));
       
       const activeUnits = eng.units.filter(u => u.faction === Faction.PLAYER && u.state !== UnitState.DEAD && u.state !== UnitState.DIE);
-      
       const miners = activeUnits.filter(u => u.type === UnitType.MINER).length;
       const heroes = activeUnits.filter(u => u.type === UnitType.HERO).length;
       const sword = activeUnits.filter(u => u.type === UnitType.SWORDMAN).length;
@@ -104,7 +103,6 @@ const App: React.FC = () => {
       const cav = activeUnits.filter(u => u.type === UnitType.CAVALRY).length;
       
       const normalArmy = sword + archer + cav;
-      
       const queuedHeroes = eng.playerQueue.filter(q => q.type === UnitType.HERO).length;
       const queuedNormals = eng.playerQueue.length - queuedHeroes;
       
@@ -112,14 +110,14 @@ const App: React.FC = () => {
       setPopulation(miners + normalArmy + queuedNormals);
       setHeroPopulation(heroes + queuedHeroes);
       setTowerCount(eng.playerTowers);
-      
-      // Update max population display based on current engine state (which mirrors upgrades)
       setMaxPopulation(MAX_POPULATION + eng.upgrades.maxPopUpgrade);
 
       setSpawnQueue([...eng.playerQueue]); 
 
       setRallyPointSet(eng.rallyPoint !== null);
-      setPatrolPointSet(eng.patrolPoint !== null); // Sync patrol
+      setPatrolPointSet(eng.patrolPoint !== null); 
+      setVanguardPointSet(eng.vanguardPoint !== null);
+      
       setCooldowns({...eng.skillCooldowns});
       setActiveTimers({...eng.skillActiveTimers});
       setMaxDurations({...eng.skillMaxDurations});
@@ -132,23 +130,17 @@ const App: React.FC = () => {
 
       if (eng.victory) {
           setGameState('VICTORY');
-          
-          // Update Record
           let newRecords = { ...levelRecords };
           if (!newRecords[level] || currentSeconds < newRecords[level]) {
               newRecords[level] = currentSeconds;
               setLevelRecords(newRecords);
           }
-
           if (level >= maxReachedLevel) {
               const next = Math.min(MAX_LEVEL, level + 1);
               setMaxReachedLevel(next);
-              // CRITICAL FIX: Use eng.upgrades instead of upgrades state to ensure we save the latest data
               saveProgress(next, eng.upgrades, newRecords);
           } else {
-              // Just save records/upgrades if replaying old levels
               localStorage.setItem('stickman_level_records', JSON.stringify(newRecords));
-              // CRITICAL FIX: Use eng.upgrades
               saveUpgradesOnly(eng.upgrades);
           }
       }
@@ -156,7 +148,6 @@ const App: React.FC = () => {
   };
 
   const startGame = (lvl: number) => {
-    // RESET UI STATES TO AVOID HANGS
     setPaused(false);
     setGameStarted(false); 
     setGameState('PLAYING');
@@ -172,8 +163,6 @@ const App: React.FC = () => {
       isBoss
     };
 
-    // Reset session-based upgrades (Pop Limit & Income) for the new match
-    // BUT keep permanent upgrades
     const sessionUpgrades: UpgradeState = {
         ...upgrades,
         maxPopUpgrade: 0,
@@ -181,9 +170,11 @@ const App: React.FC = () => {
     };
     setUpgrades(sessionUpgrades);
 
-    // Pass reset upgrades to engine
     const newEngine = new GameEngine(gameLevel, sessionUpgrades, syncState);
     newEngine.gold = INITIAL_GOLD; 
+    newEngine.setVanguardPercentage(0.2); // Default 20%
+    setVanguardPercentage(0.2);
+
     setEngine(newEngine);
     
     setGold(INITIAL_GOLD);
@@ -192,6 +183,7 @@ const App: React.FC = () => {
     setActiveSkill(null);
     setRallyPointSet(false);
     setPatrolPointSet(false);
+    setVanguardPointSet(false);
     setTowerCount(0);
   };
 
@@ -229,7 +221,6 @@ const App: React.FC = () => {
           setUpgrades(prev => {
              const next = { ...prev, maxPopUpgrade: prev.maxPopUpgrade + 1 };
              engine.upgrades = next;
-             // Don't save permanent pop upgrades here, they are session based
              return next;
           });
           syncState(engine);
@@ -242,7 +233,6 @@ const App: React.FC = () => {
           setUpgrades(prev => {
               const next = { ...prev, passiveGold: (prev.passiveGold || 0) + 1 };
               engine.upgrades = next;
-              // Session based, don't save to LS
               return next;
           });
           syncState(engine);
@@ -255,7 +245,7 @@ const App: React.FC = () => {
       }
   };
 
-  const handleSetStrategy = (strategy: 'CHARGE' | 'DEFEND' | 'PATROL') => {
+  const handleSetStrategy = (strategy: 'CHARGE' | 'DEFEND' | 'PATROL' | 'VANGUARD') => {
       if (!engine) return;
       if (strategy === 'CHARGE') {
           engine.clearRallyPoint();
@@ -263,13 +253,20 @@ const App: React.FC = () => {
       } else if (strategy === 'DEFEND') {
           setActiveSkill('SET_RALLY'); 
       } else if (strategy === 'PATROL') {
-          if (activeSkill === 'SET_PATROL') {
-              setActiveSkill(null); 
-          } else if (patrolPointSet) {
-              engine.cancelPatrol();
-          } else {
-              setActiveSkill('SET_PATROL');
-          }
+          if (activeSkill === 'SET_PATROL') setActiveSkill(null);
+          else if (patrolPointSet) engine.cancelPatrol();
+          else setActiveSkill('SET_PATROL');
+      } else if (strategy === 'VANGUARD') {
+          if (activeSkill === 'SET_VANGUARD') setActiveSkill(null);
+          else if (vanguardPointSet) engine.setVanguardPoint(0); // clear
+          else setActiveSkill('SET_VANGUARD');
+      }
+  };
+  
+  const handleSetVanguardPct = (pct: number) => {
+      if(engine) {
+          engine.setVanguardPercentage(pct);
+          setVanguardPercentage(pct);
       }
   };
 
@@ -300,6 +297,14 @@ const App: React.FC = () => {
   const handleBackToMenu = () => {
       setEngine(null);
       setGameState('LEVEL_SELECT');
+  };
+
+  const handleSkillUsed = () => {
+      // Only clear selection for instant-cast skills.
+      // For Flag placement (Rally/Patrol), keep the mode active so user can click ground repeatedly.
+      if (activeSkill && ['ARROW_RAIN', 'LIGHTNING', 'FREEZE'].includes(activeSkill)) {
+          setActiveSkill(null);
+      }
   };
 
   const t = TRANS[lang];
@@ -426,7 +431,7 @@ const App: React.FC = () => {
             <GameCanvas 
                 engine={engine} 
                 targetingSkill={activeSkill}
-                onSkillUsed={() => setActiveSkill(null)}
+                onSkillUsed={handleSkillUsed}
             />
             {/* Pass maxReachedLevel for Gating */}
             <UpgradeMenu 
@@ -472,13 +477,16 @@ const App: React.FC = () => {
                 activeSkill={activeSkill}
                 onUseSkill={(skill) => setActiveSkill(skill === activeSkill ? null : skill)}
                 onSetStrategy={handleSetStrategy}
+                onSetVanguardPct={handleSetVanguardPct}
+                vanguardPointSet={vanguardPointSet}
+                vanguardPercentage={vanguardPercentage}
                 onBuyPopUpgrade={handleBuyPopUpgrade}
                 onBuyPassiveGoldUpgrade={handleBuyPassiveGoldUpgrade}
                 onBuyTower={handleBuyTower}
                 towerCount={towerCount}
                 passiveGoldLevel={upgrades.passiveGold || 0}
                 rallyPointSet={rallyPointSet}
-                patrolPointSet={patrolPointSet} // Pass prop
+                patrolPointSet={patrolPointSet} 
                 cooldowns={cooldowns}
                 activeTimers={activeTimers}
                 maxDurations={maxDurations}
@@ -491,8 +499,6 @@ const App: React.FC = () => {
       {(gameState === 'VICTORY' || gameState === 'DEFEAT') && (
         <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50">
           <div className="bg-slate-800 p-8 rounded-2xl border-2 border-slate-600 text-center max-w-md shadow-2xl animate-fade-in relative overflow-hidden">
-             
-             {/* Victory Particles/Fireworks container implied in GameCanvas, but text here */}
              <h2 className={`text-5xl font-black mb-4 ${gameState === 'VICTORY' ? 'text-green-500' : 'text-red-500'}`}>
                 {gameState === 'VICTORY' ? t.victory : t.defeat}
              </h2>
