@@ -135,6 +135,10 @@ export class GameEngine {
       this.onStateChange(this);
   }
 
+  triggerScreenShake(amount: number) {
+      this.screenShake = amount;
+  }
+
   initEnvironment() {
       const elementCount = 15;
       for(let i=0; i<elementCount; i++) {
@@ -780,10 +784,6 @@ export class GameEngine {
       }
   }
 
-  triggerScreenShake(amount: number) {
-    this.screenShake = amount;
-  }
-
   createParticles(x: number, y: number, count: number, color: string, gravity: boolean = true) {
     for (let i = 0; i < count; i++) {
       this.particles.push({
@@ -900,19 +900,32 @@ export class GameEngine {
 
   fireArrow(unit: Unit, target: Unit) {
     const dx = target.x - unit.x;
-    const dy = (target.y - target.height / 2) - (unit.y - unit.height / 2);
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    // AIM FROM NECK (Approx 75% height up)
+    const startY = unit.y - (unit.height * 0.75);
+    const speed = 20; // Increased speed for flatter shot
+
+    // AIM AT UPPER BODY of target to compensate for gravity
+    // Aim at 60% height instead of 70% to ensure center mass hit with drop
+    const ty = target.y - (target.height * 0.6); 
     
-    // Calculate angle with slight arc
-    // Heuristic: Aim slightly higher than direct line based on distance
-    const arcAdjust = Math.min(dist / 4, 150); 
-    const angle = Math.atan2(dy - arcAdjust, dx);
-    const speed = 15;
+    // BALLISTIC CALCULATION
+    // We need to hit (dx, dy).
+    // Vertical drop due to gravity over time t: h = 0.5 * g * t^2
+    // t = dist / speed
+    const directDist = Math.sqrt(dx*dx + (ty - startY)*(ty - startY));
+    const flightTime = directDist / speed;
+    const gravityDrop = 0.5 * GRAVITY * flightTime * flightTime;
+    
+    // We aim HIGHER by exactly the amount gravity will pull it down
+    // targetY is "higher" (smaller value) than ty
+    const targetY = ty - gravityDrop;
+    
+    const angle = Math.atan2(targetY - startY, dx);
 
     this.projectiles.push({
       id: Math.random().toString(),
       x: unit.x,
-      y: unit.y - unit.height / 2,
+      y: startY,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
       startX: unit.x,
@@ -929,17 +942,25 @@ export class GameEngine {
 
   fireArrowAtBase(unit: Unit, baseX: number) {
     const dx = baseX - unit.x;
-    const dy = (GROUND_Y - 150) - (unit.y - unit.height / 2); // Aim at castle center
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    const startY = unit.y - (unit.height * 0.75);
+    const speed = 20; // Increased speed
+
+    // Target the "Heart" of the castle structure
+    // Castle draws from -100 to -160 (height). Center is around -130.
+    const ty = GROUND_Y - 130;
     
-    const arcAdjust = Math.min(dist / 4, 150);
-    const angle = Math.atan2(dy - arcAdjust, dx);
-    const speed = 15;
+    // Ballistic Calc
+    const dist = Math.abs(dx); // X-distance dominates
+    const flightTime = dist / speed;
+    const gravityDrop = 0.5 * GRAVITY * flightTime * flightTime;
+    
+    const targetY = ty - gravityDrop;
+    const angle = Math.atan2(targetY - startY, dx);
 
     this.projectiles.push({
       id: Math.random().toString(),
       x: unit.x,
-      y: unit.y - unit.height / 2,
+      y: startY,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
       startX: unit.x,
@@ -1008,7 +1029,8 @@ export class GameEngine {
               }
 
               // STOP if we have a target within our specific engagement distance
-              if (target && distToTarget <= engageDistance) {
+              // OR if we are in range of the enemy base
+              if ((target && distToTarget <= engageDistance) || (Math.abs(unit.x - enemyBaseX) <= range)) {
                   movingToFlag = false; // Engage!
               } else {
                   movingToFlag = true;
@@ -1276,9 +1298,10 @@ export class GameEngine {
                const isPlayerShot = p.faction === Faction.PLAYER;
                const targetBaseX = isPlayerShot ? ENEMY_BASE_X : PLAYER_BASE_X;
                
-               // Castle is approx 120px wide centered at BASE_X. Height is 160px from GROUND_Y up.
-               // Check if arrow is within horizontal bounds and vertical bounds
-               if (Math.abs(p.x - targetBaseX) < 60 && p.y > (GROUND_Y - 160) && p.y < GROUND_Y) {
+               // EXPANDED HITBOX FOR BASE
+               // Width: +/- 120 (Total 240px wide) - Ensure close range hits
+               // Height: Ground to -250 (Tall enough to catch high arcs)
+               if (Math.abs(p.x - targetBaseX) < 120 && p.y > (GROUND_Y - 250) && p.y < GROUND_Y) {
                    if (isPlayerShot) {
                        this.enemyBaseHp -= p.damage;
                    } else {

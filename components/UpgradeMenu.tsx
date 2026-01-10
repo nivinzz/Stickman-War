@@ -91,30 +91,49 @@ const UpgradeMenu: React.FC<UpgradeMenuProps> = ({ upgrades, gold, onUpgrade, la
       const cost = getCost(level);
       const globalLimit = MAX_UPGRADE_LEVELS[key] || 99; 
       
-      // --- NEW GATING LOGIC (3 TIERS) ---
-      // Tier 1: Maps 1-20
-      // Tier 2: Maps 21-40
-      // Tier 3: Maps 41-60
-      
       const isPrimaryUnit = key === 'swordDamage' || key === 'archerDamage' || key === 'cavalryDamage';
       
       let progressCap = 0;
       let requiredMap = 0;
 
-      // Tier Calculation based on Max Reached Level
-      // Tier 1 (1-20): Units Cap 10, Others Cap 7
-      // Tier 2 (21-40): Units Cap 20, Others Cap 14
-      // Tier 3 (41-60): Units Cap 30, Others Cap 20
-      
-      if (maxReachedLevel <= 20) {
-          progressCap = isPrimaryUnit ? 10 : 7;
-          requiredMap = 21;
-      } else if (maxReachedLevel <= 40) {
-          progressCap = isPrimaryUnit ? 20 : 14;
-          requiredMap = 41;
+      if (isPrimaryUnit) {
+          // COMBAT UNIT TIER LOGIC (Max 90)
+          // Map 1-20: Max 30
+          // Map 21-30: Max 50
+          // Map 31-40: Max 60
+          // Map 41-50: Max 70
+          // Map 51-60: Max 90
+          if (maxReachedLevel <= 20) {
+              progressCap = 30;
+              requiredMap = 21;
+          } else if (maxReachedLevel <= 30) {
+              progressCap = 50;
+              requiredMap = 31;
+          } else if (maxReachedLevel <= 40) {
+              progressCap = 60;
+              requiredMap = 41;
+          } else if (maxReachedLevel <= 50) {
+              progressCap = 70;
+              requiredMap = 51;
+          } else {
+              progressCap = 90;
+              requiredMap = 61;
+          }
       } else {
-          progressCap = isPrimaryUnit ? 30 : 20; // Max
-          requiredMap = 61; // Maxed out
+          // OTHER UNITS/SKILLS LOGIC (Max 20)
+          // Map 1-20: Max 7
+          // Map 21-40: Max 14
+          // Map 41+: Max 20
+          if (maxReachedLevel <= 20) {
+              progressCap = 7;
+              requiredMap = 21;
+          } else if (maxReachedLevel <= 40) {
+              progressCap = 14;
+              requiredMap = 41;
+          } else {
+              progressCap = 20;
+              requiredMap = 61;
+          }
       }
       
       const effectiveLimit = Math.min(globalLimit, progressCap);

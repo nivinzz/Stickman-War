@@ -44,16 +44,16 @@ export const FPS = 60;
 export const UNIT_CONFIG: Record<UnitType, UnitStats> = {
   [UnitType.MINER]: { hp: 60, maxHp: 60, damage: 5, range: 10, speed: 2, attackSpeed: 60, cost: 50, spawnTime: 120 }, 
   [UnitType.SWORDMAN]: { hp: 150, maxHp: 150, damage: 20, range: 40, speed: 1.5, attackSpeed: 50, cost: 100, spawnTime: 180 },
-  // Archer: Range increased from 450 to 475 (+5%)
-  [UnitType.ARCHER]: { hp: 80, maxHp: 80, damage: 15, range: 475, minRange: 200, speed: 1.2, attackSpeed: 90, cost: 200, spawnTime: 240 }, 
+  // Archer: Attack speed reduced to 180 (Slower fire rate), Range 475
+  [UnitType.ARCHER]: { hp: 80, maxHp: 80, damage: 15, range: 475, minRange: 200, speed: 1.2, attackSpeed: 180, cost: 200, spawnTime: 240 }, 
   [UnitType.CAVALRY]: { hp: 300, maxHp: 300, damage: 35, range: 70, speed: 3.5, attackSpeed: 60, cost: 350, spawnTime: 360 },
   // Hero: Speed decreased from 2.0 to 1.0 (Slowest unit)
   [UnitType.HERO]: { hp: 1200, maxHp: 1200, damage: 80, range: 70, speed: 1.0, attackSpeed: 40, cost: 1000, spawnTime: 600 },
 };
 
 // Max Levels for Upgrade Menu (Aligned with new Gating System)
-// Units: Max 30 (10 per tier)
-// Others: Max 20 (7-7-6 split)
+// Units: Max 90
+// Others: Max 20
 export const MAX_UPGRADE_LEVELS: Partial<Record<keyof UpgradeState, number>> = {
     baseHp: 20,
     towerPower: 20,
@@ -63,9 +63,9 @@ export const MAX_UPGRADE_LEVELS: Partial<Record<keyof UpgradeState, number>> = {
     arrowRainPower: 20, 
     lightningPower: 20,
     freezePower: 20,
-    swordDamage: 30, 
-    archerDamage: 30,
-    cavalryDamage: 30,
+    swordDamage: 90, 
+    archerDamage: 90,
+    cavalryDamage: 90,
 };
 
 export const SKILL_COOLDOWNS_FRAMES = {
@@ -93,9 +93,9 @@ export const calculateUnitStats = (type: UnitType, upgradeLevel: number): UnitSt
 
     // Specific Logic
     if (type === UnitType.ARCHER) {
-        // Archers gain 3% Attack Speed (Cooldown reduction) per level (Buffed from 2%)
-        // Cap at 20% of original cooldown (0.2 multiplier) - Insane speed at high levels
-        const speedScale = Math.max(0.2, 1 - (upgradeLevel * 0.03));
+        // Archers gain 2% Attack Speed (Cooldown reduction) per level (Reduced from 3%)
+        // Cap at 20% of original cooldown (0.2 multiplier)
+        const speedScale = Math.max(0.2, 1 - (upgradeLevel * 0.02));
         stats.attackSpeed = Math.floor(base.attackSpeed * speedScale);
     } else if (type === UnitType.MINER) {
         // Miners gain Movement Speed
