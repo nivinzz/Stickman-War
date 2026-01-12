@@ -262,9 +262,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
       engine.hazards.forEach(h => {
           if (h.type === 'FREEZE_ZONE') {
               const isPlayer = h.faction === Faction.PLAYER;
+              // Player = Blueish, Enemy = Reddish
               const baseColorTop = isPlayer ? 'rgba(224, 242, 254, 0.9)' : 'rgba(254, 202, 202, 0.9)'; 
               const baseColorBot = isPlayer ? 'rgba(125, 211, 252, 0.6)' : 'rgba(248, 113, 113, 0.6)';
               const fallbackColor = isPlayer ? 'rgba(186, 230, 253, 0.5)' : 'rgba(252, 165, 165, 0.5)';
+              
               ctx.save();
               ctx.translate(h.x, GROUND_Y);
               if (h.visuals) {
@@ -276,7 +278,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
                       grad.addColorStop(0, baseColorTop); 
                       grad.addColorStop(1, baseColorBot); 
                       ctx.fillStyle = grad;
-                      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+                      ctx.strokeStyle = isPlayer ? 'rgba(186, 230, 253, 0.8)' : 'rgba(254, 202, 202, 0.8)';
                       ctx.lineWidth = 1;
                       ctx.beginPath(); ctx.moveTo(0, -shard.height); ctx.lineTo(shard.width/2, 0); ctx.lineTo(-shard.width/2, 0);
                       ctx.closePath(); ctx.fill(); ctx.stroke();
@@ -536,15 +538,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
   const drawProjectiles = (ctx: CanvasRenderingContext2D) => {
       engine.projectiles.forEach(p => {
           if (!p.active) return;
+          const isPlayer = p.faction === Faction.PLAYER;
+          const factionColor = isPlayer ? '#3b82f6' : '#ef4444'; // Blue vs Red
+
           if (p.type === 'ARROW' || p.type === 'TOWER_SHOT') {
               ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rotation);
               if (p.type === 'TOWER_SHOT') {
-                   ctx.fillStyle = p.faction === Faction.PLAYER ? '#60a5fa' : '#f87171';
+                   ctx.fillStyle = isPlayer ? '#60a5fa' : '#f87171';
                    ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
                    ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle; ctx.fill(); ctx.shadowBlur = 0;
               } else if (p.type === 'ARROW') {
-                  // --- BLUE & LONGER ARROW FOR ARROW RAIN ---
-                  ctx.fillStyle = '#3b82f6'; // Blue color
+                  // --- COLORED ARROW ---
+                  ctx.fillStyle = factionColor; 
                   // Make it longer: -15 to +15 (30px total)
                   ctx.fillRect(-15, -1.5, 30, 3); 
                   
@@ -554,14 +559,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
                   ctx.lineTo(22, 0); 
                   ctx.lineTo(15, 4);
                   ctx.fill();
-              } else {
-                  // Standard arrow backup
-                   ctx.fillStyle = '#fff'; ctx.fillRect(-10, -1, 20, 2); ctx.beginPath(); ctx.moveTo(10, -3); ctx.lineTo(15, 0); ctx.lineTo(10, 3); ctx.fill();
               }
               ctx.restore();
           } else if (p.type === 'LIGHTNING_BOLT' && p.points) {
-               ctx.save(); ctx.strokeStyle = p.faction === Faction.PLAYER ? '#e0f2fe' : '#fecaca';
-               ctx.lineWidth = 3; ctx.shadowBlur = 10; ctx.shadowColor = p.faction === Faction.PLAYER ? '#0ea5e9' : '#ef4444'; ctx.globalAlpha = p.opacity || 1;
+               ctx.save(); 
+               ctx.strokeStyle = isPlayer ? '#e0f2fe' : '#fecaca';
+               ctx.lineWidth = 3; 
+               ctx.shadowBlur = 10; 
+               ctx.shadowColor = factionColor; 
+               ctx.globalAlpha = p.opacity || 1;
                ctx.beginPath();
                if (p.points.length > 0) { ctx.moveTo(p.points[0].x, p.points[0].y); for(let i=1; i<p.points.length; i++) { ctx.lineTo(p.points[i].x, p.points[i].y); } }
                ctx.stroke(); ctx.restore();

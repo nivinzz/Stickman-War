@@ -12,7 +12,7 @@ export const MAX_HEROES = 5;
 export const MAX_LEVEL = 60; // Increased to 60
 
 export const POP_UPGRADE_COST = 2000;
-export const MAX_POP_UPGRADES = 5; // Buy 5 times -> Total 35
+export const MAX_POP_UPGRADES = 10; // Increased to 10 (Total Max Pop = 40)
 
 export const PASSIVE_GOLD_UPGRADE_COST = 3000;
 export const MAX_PASSIVE_GOLD_LEVEL = 5; // Max 5 upgrades (Base 5 + 25 = 30G/s)

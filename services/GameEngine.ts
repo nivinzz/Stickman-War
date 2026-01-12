@@ -506,7 +506,7 @@ export class GameEngine {
   spawnArrowRain(x: number, faction: Faction, powerLevel: number) {
     const isPlayer = faction === Faction.PLAYER;
     const durationMultiplier = 1 + (powerLevel * 0.1);
-    const durationFrames = 180 * durationMultiplier;
+    const durationFrames = 300 * durationMultiplier; // INCREASED DURATION to 5s base (was 180)
     
     if (isPlayer) {
         this.skillActiveTimers.ARROW_RAIN = durationFrames;
@@ -541,18 +541,18 @@ export class GameEngine {
     const isPlayer = faction === Faction.PLAYER;
     
     // Create a new active storm
-    // Duration: 3 seconds (180 frames)
+    // INCREASED DURATION: 5 seconds (300 frames) - was 180
     this.activeStorms.push({
         id: Math.random().toString(),
         faction,
         x,
-        duration: 180,
+        duration: 300, 
         level: powerLevel
     });
 
     if (isPlayer) {
-        this.skillActiveTimers.LIGHTNING = 180; 
-        this.skillMaxDurations.LIGHTNING = 180;
+        this.skillActiveTimers.LIGHTNING = 300; 
+        this.skillMaxDurations.LIGHTNING = 300;
     }
     
     // Initial sound
@@ -643,7 +643,8 @@ export class GameEngine {
   spawnFreeze(x: number, faction: Faction, powerLevel: number) {
       const isPlayer = faction === Faction.PLAYER;
       const range = 200; 
-      const freezeDurationFrames = (5 * (1 + (powerLevel * 0.05))) * 60; // Base 5s + upgrades
+      // INCREASED DURATION: Base 8 seconds (480 frames) - was 5s
+      const freezeDurationFrames = (8 * (1 + (powerLevel * 0.05))) * 60;
       
       // SCALING STATS
       // Slow Factor: Starts at 0.5 (50%), drops by 0.02 per level (e.g., Lvl 10 = 0.3)
