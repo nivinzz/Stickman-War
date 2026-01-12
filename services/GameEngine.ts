@@ -251,7 +251,8 @@ export class GameEngine {
                   u.faction === Faction.ENEMY && 
                   u.state !== UnitState.DIE && 
                   u.state !== UnitState.DEAD &&
-                  u.x < PLAYER_BASE_X + TOWER_RANGE + 100 
+                  // Strict check: Must be within Tower Range from Base X
+                  u.x < PLAYER_BASE_X + TOWER_RANGE 
               );
               
               if (target) {
@@ -270,7 +271,8 @@ export class GameEngine {
                   u.faction === Faction.PLAYER && 
                   u.state !== UnitState.DIE && 
                   u.state !== UnitState.DEAD &&
-                  u.x > ENEMY_BASE_X - TOWER_RANGE - 100
+                  // Strict check
+                  u.x > ENEMY_BASE_X - TOWER_RANGE
               );
               
               if (target) {
@@ -514,8 +516,8 @@ export class GameEngine {
     }
 
     const arrowCount = Math.floor(durationFrames / 5);
-    // NEW FORMULA: Base 50, +20% per level
-    const damage = 50 * (1 + (powerLevel * 0.2));
+    // NEW FORMULA: Base 55 (increased from 50), +20% per level
+    const damage = 55 * (1 + (powerLevel * 0.2));
 
     for (let i = 0; i < arrowCount; i++) {
       setTimeout(() => {
@@ -571,8 +573,8 @@ export class GameEngine {
               const boltX = storm.x + offsetX;
               
               // Damage per bolt
-              // NEW FORMULA: Base 40, +20% per level
-              const damage = 40 * (1 + (storm.level * 0.2));
+              // NEW FORMULA: Base 44 (increased from 40), +20% per level
+              const damage = 44 * (1 + (storm.level * 0.2));
               
               // Create Visual Bolt (Zigzag lines)
               const points: {x:number, y:number}[] = [];

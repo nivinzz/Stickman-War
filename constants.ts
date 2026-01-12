@@ -21,8 +21,9 @@ export const MAX_PASSIVE_GOLD_LEVEL = 5; // Max 5 upgrades (Base 5 + 25 = 30G/s)
 export const MAX_TOWERS = 5;
 export const TOWER_COST_BASE = 1500;
 export const TOWER_COST_INC = 500; 
-export const TOWER_RANGE = 550;    // Increased range due to wider map
-export const TOWER_DAMAGE_BASE = 25; 
+// Archer Range is 475. Tower Range = 475 * 1.5 = ~715
+export const TOWER_RANGE = 715;    
+export const TOWER_DAMAGE_BASE = 50; // Increased to 50
 export const TOWER_COOLDOWN = 60; 
 
 export const BASE_HP = 2000;
@@ -43,26 +44,30 @@ export const FPS = 60;
 // Unit configuration
 export const UNIT_CONFIG: Record<UnitType, UnitStats> = {
   [UnitType.MINER]: { hp: 60, maxHp: 60, damage: 5, range: 10, speed: 2, attackSpeed: 60, cost: 50, spawnTime: 120 }, 
-  [UnitType.SWORDMAN]: { hp: 150, maxHp: 150, damage: 20, range: 40, speed: 1.5, attackSpeed: 50, cost: 100, spawnTime: 180 },
-  // Archer: Attack speed reduced to 180 (Slower fire rate), Range 475
-  [UnitType.ARCHER]: { hp: 80, maxHp: 80, damage: 15, range: 475, minRange: 200, speed: 1.2, attackSpeed: 180, cost: 200, spawnTime: 240 }, 
-  [UnitType.CAVALRY]: { hp: 300, maxHp: 300, damage: 35, range: 70, speed: 3.5, attackSpeed: 60, cost: 350, spawnTime: 360 },
-  // Hero: Speed decreased from 2.0 to 1.0 (Slowest unit)
-  [UnitType.HERO]: { hp: 1200, maxHp: 1200, damage: 80, range: 70, speed: 1.0, attackSpeed: 40, cost: 1000, spawnTime: 600 },
+  // Sword: Damage 20 -> 22
+  [UnitType.SWORDMAN]: { hp: 150, maxHp: 150, damage: 22, range: 40, speed: 1.5, attackSpeed: 50, cost: 100, spawnTime: 180 },
+  // Archer: Damage 15 -> 18
+  [UnitType.ARCHER]: { hp: 80, maxHp: 80, damage: 18, range: 475, minRange: 200, speed: 1.2, attackSpeed: 180, cost: 200, spawnTime: 240 }, 
+  // Cavalry: Damage 35 -> 40
+  [UnitType.CAVALRY]: { hp: 300, maxHp: 300, damage: 40, range: 70, speed: 3.5, attackSpeed: 60, cost: 350, spawnTime: 360 },
+  // Hero: Damage 80 -> 90
+  [UnitType.HERO]: { hp: 1200, maxHp: 1200, damage: 90, range: 70, speed: 1.0, attackSpeed: 40, cost: 1000, spawnTime: 600 },
 };
 
 // Max Levels for Upgrade Menu (Aligned with new Gating System)
 // Units: Max 90
+// Tower: Max 50
+// Skills: Max 40
 // Others: Max 20
 export const MAX_UPGRADE_LEVELS: Partial<Record<keyof UpgradeState, number>> = {
     baseHp: 20,
-    towerPower: 20,
+    towerPower: 50, // Increased to 50
     heroPower: 20,  
     minerSpeed: 20, 
     spawnSpeed: 20, 
-    arrowRainPower: 20, 
-    lightningPower: 20,
-    freezePower: 20,
+    arrowRainPower: 40, // Increased to 40
+    lightningPower: 40, // Increased to 40
+    freezePower: 40,    // Increased to 40
     swordDamage: 90, 
     archerDamage: 90,
     cavalryDamage: 90,
