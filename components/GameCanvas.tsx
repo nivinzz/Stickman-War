@@ -465,13 +465,71 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
     ctx.restore();
   };
 
-  const drawCastle = (ctx: CanvasRenderingContext2D, x: number, y: number, isPlayer: boolean) => {
+  const drawCastle = (ctx: CanvasRenderingContext2D, x: number, y: number, isPlayer: boolean, towerCount: number) => {
       ctx.save(); ctx.translate(x, y); if (!isPlayer) ctx.scale(-1, 1);
-      ctx.fillStyle = '#334155'; ctx.fillRect(-60, -100, 120, 100);
-      ctx.fillStyle = '#1e293b'; ctx.fillRect(-70, -120, 30, 20); ctx.fillRect(-20, -120, 40, 20); ctx.fillRect(40, -120, 30, 20);
+      
+      // 1. Castle Base (Foundation) - Reduced Height slightly to make room for towers
+      const baseHeight = 100;
+      ctx.fillStyle = '#334155'; ctx.fillRect(-60, -baseHeight, 120, baseHeight);
+      
+      // Base Battlements
+      ctx.fillStyle = '#1e293b'; 
+      ctx.fillRect(-70, -baseHeight - 20, 30, 20); // Left battlement
+      ctx.fillRect(-20, -baseHeight - 20, 40, 20); // Center gate arch top
+      ctx.fillRect(40, -baseHeight - 20, 30, 20); // Right battlement
+      
+      // Gate (Entrance)
       ctx.fillStyle = '#0f172a'; ctx.beginPath(); ctx.arc(0, 0, 30, Math.PI, 0); ctx.fill();
-      ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(0, -120); ctx.lineTo(0, -160); ctx.stroke();
-      ctx.fillStyle = isPlayer ? '#3b82f6' : '#ef4444'; ctx.beginPath(); ctx.moveTo(0, -160); ctx.lineTo(40, -145); ctx.lineTo(0, -130); ctx.fill();
+
+      // 2. Tower Stacking System
+      // Towers are drawn on top of the base
+      const towerFloorHeight = 30; // Height of each tower level
+      const towerWidth = 70; // Width of the tower structure
+      
+      let currentY = -baseHeight - 20; // Start drawing from top of base battlements
+
+      if (towerCount > 0) {
+          // Draw Tower Base Connector
+          ctx.fillStyle = '#475569';
+          ctx.fillRect(-towerWidth/2, currentY - 5, towerWidth, 5);
+          currentY -= 5;
+
+          for (let i = 0; i < towerCount; i++) {
+              // Tower Floor Body
+              ctx.fillStyle = (i % 2 === 0) ? '#64748b' : '#475569'; // Alternating colors for floors
+              ctx.fillRect(-towerWidth/2, currentY - towerFloorHeight, towerWidth, towerFloorHeight);
+              
+              // Tower Window (Arrow Slit)
+              ctx.fillStyle = '#0f172a';
+              ctx.fillRect(-5, currentY - towerFloorHeight + 10, 10, 15);
+
+              // Floor Separator / Mini Battlements
+              ctx.fillStyle = '#1e293b';
+              ctx.fillRect(-(towerWidth/2) - 5, currentY - towerFloorHeight - 5, towerWidth + 10, 5);
+              
+              currentY -= towerFloorHeight;
+          }
+      }
+
+      // 3. Top Roof / Flag Pole
+      // Draw a pointed roof or final battlement on the very top
+      if (towerCount > 0) {
+          // Top Battlements
+          ctx.fillStyle = '#1e293b';
+          ctx.fillRect(-35, currentY - 10, 15, 10);
+          ctx.fillRect(-5, currentY - 10, 10, 10);
+          ctx.fillRect(20, currentY - 10, 15, 10);
+          currentY -= 10;
+      }
+
+      // Flag Pole
+      ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 4; 
+      ctx.beginPath(); ctx.moveTo(0, currentY); ctx.lineTo(0, currentY - 40); ctx.stroke();
+      
+      // Flag
+      ctx.fillStyle = isPlayer ? '#3b82f6' : '#ef4444'; 
+      ctx.beginPath(); ctx.moveTo(0, currentY - 40); ctx.lineTo(40, currentY - 25); ctx.lineTo(0, currentY - 10); ctx.fill();
+      
       ctx.restore();
   };
 
@@ -595,10 +653,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
     drawGoldMine(ctx, PLAYER_BASE_X + MINING_DISTANCE, true);
     drawGoldMine(ctx, ENEMY_BASE_X - MINING_DISTANCE, false);
 
-    drawCastle(ctx, PLAYER_BASE_X, GROUND_Y, true);
+    // Pass tower counts to the updated drawCastle function
+    drawCastle(ctx, PLAYER_BASE_X, GROUND_Y, true, engine.playerTowers);
     drawCastleHP(ctx, PLAYER_BASE_X, engine.playerBaseHp, engine.playerMaxBaseHp);
 
-    drawCastle(ctx, ENEMY_BASE_X, GROUND_Y, false);
+    drawCastle(ctx, ENEMY_BASE_X, GROUND_Y, false, engine.enemyTowers);
     drawCastleHP(ctx, ENEMY_BASE_X, engine.enemyBaseHp, engine.enemyMaxBaseHp);
   };
   

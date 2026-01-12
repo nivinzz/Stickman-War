@@ -514,7 +514,8 @@ export class GameEngine {
     }
 
     const arrowCount = Math.floor(durationFrames / 5);
-    const damage = 50 + (powerLevel * 10);
+    // NEW FORMULA: Base 50, +20% per level
+    const damage = 50 * (1 + (powerLevel * 0.2));
 
     for (let i = 0; i < arrowCount; i++) {
       setTimeout(() => {
@@ -570,7 +571,8 @@ export class GameEngine {
               const boltX = storm.x + offsetX;
               
               // Damage per bolt
-              const damage = 40 + (storm.level * 10); 
+              // NEW FORMULA: Base 40, +20% per level
+              const damage = 40 * (1 + (storm.level * 0.2));
               
               // Create Visual Bolt (Zigzag lines)
               const points: {x:number, y:number}[] = [];
@@ -651,8 +653,9 @@ export class GameEngine {
       // DoT: 2% of Max HP per second (Fixed per request, duration scaling makes it deadlier)
       const dotPercentage = 0.02; 
       
-      // Explosion: Base 5% + 0.5% per level
-      const explosionPercentage = 0.05 + (powerLevel * 0.005);
+      // Explosion: Base 5% + 20% scaling per level
+      // 0.05 * (1 + 0.2*lvl)
+      const explosionPercentage = 0.05 * (1 + (powerLevel * 0.2));
 
       if (isPlayer) {
           this.skillActiveTimers.FREEZE = freezeDurationFrames;
@@ -1512,7 +1515,11 @@ export class GameEngine {
     this.playerVisibleX = Math.min(pMaxVis, WORLD_WIDTH);
     this.enemyVisibleX = Math.max(eMinVis, 0);
 
-    const passiveIncome = 1 + ((this.upgrades.passiveGold || 0) * 2); 
+    // INCOME LOGIC: Base 5 + (UpgradeLevel * 5)
+    // Level 0: 5G/s
+    // Level 1: 10G/s
+    // Level 5: 30G/s
+    const passiveIncome = 5 + ((this.upgrades.passiveGold || 0) * 5); 
     if (this.frame % 60 === 0) {
         this.gold += passiveIncome;
     }

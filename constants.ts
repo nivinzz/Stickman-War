@@ -7,15 +7,15 @@ export const CANVAS_HEIGHT = 600;
 export const WORLD_WIDTH = 3200;  // Longer battlefield
 export const GROUND_Y = 500;
 
-export const MAX_POPULATION = 25; // Base max is 25
+export const MAX_POPULATION = 30; // Increased base max to 30 (Total 35 with upgrades)
 export const MAX_HEROES = 5;      
 export const MAX_LEVEL = 60; // Increased to 60
 
 export const POP_UPGRADE_COST = 2000;
-export const MAX_POP_UPGRADES = 5; // Buy 5 times -> Total 30
+export const MAX_POP_UPGRADES = 5; // Buy 5 times -> Total 35
 
 export const PASSIVE_GOLD_UPGRADE_COST = 3000;
-export const MAX_PASSIVE_GOLD_LEVEL = 5; // Max 5 upgrades (Base 1 + 10 = 11G/s)
+export const MAX_PASSIVE_GOLD_LEVEL = 5; // Max 5 upgrades (Base 5 + 25 = 30G/s)
 
 // Tower Constants
 export const MAX_TOWERS = 5;

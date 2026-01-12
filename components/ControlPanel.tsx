@@ -169,7 +169,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ gold, population, maxPopula
   const isHeroFull = heroPopulation >= MAX_HEROES;
   const maxPopReached = maxPopulation >= (MAX_POPULATION + MAX_POP_UPGRADES);
   
-  const currentIncome = 1 + (passiveGoldLevel * 2);
+  // Base 5 + (Level * 5)
+  const currentIncome = 5 + (passiveGoldLevel * 5);
   const isPassiveGoldMax = passiveGoldLevel >= MAX_PASSIVE_GOLD_LEVEL; 
   
   const towerCost = TOWER_COST_BASE + (towerCount * TOWER_COST_INC);
@@ -210,9 +211,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ gold, population, maxPopula
                                 onClick={onBuyPassiveGoldUpgrade}
                                 disabled={gold < PASSIVE_GOLD_UPGRADE_COST}
                                 className={`text-[10px] px-1 rounded border ml-1 ${gold >= PASSIVE_GOLD_UPGRADE_COST ? 'bg-yellow-600 text-white border-yellow-400' : 'bg-slate-700 text-slate-500 border-slate-600'}`}
-                                title={`Upgrade Income (${PASSIVE_GOLD_UPGRADE_COST}G) - Adds +2G/s`}
+                                title={`Upgrade Income (${PASSIVE_GOLD_UPGRADE_COST}G) - Adds +5G/s`}
                             >
-                                +2 ({PASSIVE_GOLD_UPGRADE_COST}G)
+                                +5 ({PASSIVE_GOLD_UPGRADE_COST}G)
                             </button>
                         ) : (
                             <span className="text-[10px] px-1 ml-1 font-bold text-red-500 border border-red-500 rounded bg-red-900/20">
