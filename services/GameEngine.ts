@@ -303,7 +303,7 @@ export class GameEngine {
           type: 'TOWER_SHOT',
           rotation: Math.atan2(dy, dx)
       });
-      soundManager.playAttack('ARCHER'); 
+      soundManager.playTowerShot(); 
   }
 
   queueUnit(type: UnitType, faction: Faction) {
@@ -500,7 +500,7 @@ export class GameEngine {
       if (x > this.playerVisibleX) return;
 
       this.spawnFreeze(x, Faction.PLAYER, this.upgrades.freezePower);
-      soundManager.playSkill('Arrow Rain'); 
+      soundManager.playSkill('Freeze'); 
       this.skillCooldowns.FREEZE = SKILL_COOLDOWNS_FRAMES.FREEZE;
       this.onStateChange(this);
   }
@@ -704,7 +704,7 @@ export class GameEngine {
           visuals: shards
       });
 
-      soundManager.playSkill('Arrow Rain'); 
+      soundManager.playSkill('Freeze'); 
   }
 
   updateHazards() {
@@ -1122,7 +1122,11 @@ export class GameEngine {
                   if (unit.type === UnitType.ARCHER) this.fireArrow(unit, target);
                   else {
                       target.stats.hp -= unit.stats.damage;
-                      soundManager.playHit();
+                      
+                      // SPECIFIC SOUNDS
+                      if (unit.type === UnitType.CAVALRY) soundManager.playSpearThrust();
+                      else soundManager.playMetalClash();
+                      
                       this.createParticles(target.x, target.y - 20, 3, '#ef4444');
                       if (target.stats.hp <= 0) {
                           unit.targetId = null;
@@ -1139,7 +1143,8 @@ export class GameEngine {
                   else {
                       if (isPlayer) this.enemyBaseHp -= unit.stats.damage;
                       else this.playerBaseHp -= unit.stats.damage;
-                      soundManager.playHit();
+                      
+                      soundManager.playCastleHit(); // Hit Base Sound
                       this.triggerScreenShake(1);
                   }
               }
@@ -1241,7 +1246,7 @@ export class GameEngine {
            if (Math.abs(unit.x - base) < 5) {
               if (isPlayer) {
                   this.gold += (unit.goldCarrying || 0);
-                  soundManager.playGold();
+                  // soundManager.playGold(); // REMOVED PER REQUEST
               } else {
                   this.enemyGold += (unit.goldCarrying || 0);
               }
@@ -1315,7 +1320,9 @@ export class GameEngine {
                    }
                    p.active = false;
                    this.createParticles(p.x, p.y, 3, '#94a3b8'); // Stone chip color
-                   soundManager.playHit();
+                   
+                   soundManager.playCastleHit(); // Base hit sound
+                   
                    continue;
                }
           }

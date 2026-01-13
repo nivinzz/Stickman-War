@@ -94,6 +94,7 @@ const UpgradeMenu: React.FC<UpgradeMenuProps> = ({ upgrades, gold, onUpgrade, la
       const isPrimaryUnit = key === 'swordDamage' || key === 'archerDamage' || key === 'cavalryDamage';
       const isSkill = key === 'arrowRainPower' || key === 'lightningPower' || key === 'freezePower';
       const isTower = key === 'towerPower';
+      const isHero = key === 'heroPower';
 
       let progressCap = 0;
       let requiredMap = 0;
@@ -106,14 +107,25 @@ const UpgradeMenu: React.FC<UpgradeMenuProps> = ({ upgrades, gold, onUpgrade, la
           else if (maxReachedLevel <= 50) { progressCap = 70; requiredMap = 51; }
           else { progressCap = 90; requiredMap = 61; }
       } else if (isTower) {
-          // TOWER LOGIC (Max 50)
-          // Map 1-30: Cap 25
-          // Map 31+: Cap 50
+          // TOWER LOGIC (Max 40)
+          // Map 1-30: Cap 20
+          // Map 31+: Cap 40
           if (maxReachedLevel <= 30) {
-              progressCap = 25;
+              progressCap = 20;
               requiredMap = 31;
           } else {
-              progressCap = 50;
+              progressCap = 40;
+              requiredMap = 61; // Or Max
+          }
+      } else if (isHero) {
+          // HERO LOGIC (Max 30)
+          // Map 1-30: Cap 15
+          // Map 31+: Cap 30
+          if (maxReachedLevel <= 30) {
+              progressCap = 15;
+              requiredMap = 31;
+          } else {
+              progressCap = 30;
               requiredMap = 61; // Or Max
           }
       } else if (isSkill) {
@@ -128,7 +140,7 @@ const UpgradeMenu: React.FC<UpgradeMenuProps> = ({ upgrades, gold, onUpgrade, la
               requiredMap = 61; // Or Max
           }
       } else {
-          // OTHER UNITS (Hero, Miner, Base, etc) (Max 20)
+          // OTHER UNITS (Miner, Base, etc) (Max 20)
           if (maxReachedLevel <= 20) { progressCap = 7; requiredMap = 21; }
           else if (maxReachedLevel <= 40) { progressCap = 14; requiredMap = 41; }
           else { progressCap = 20; requiredMap = 61; }

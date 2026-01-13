@@ -56,18 +56,19 @@ export const UNIT_CONFIG: Record<UnitType, UnitStats> = {
 
 // Max Levels for Upgrade Menu (Aligned with new Gating System)
 // Units: Max 90
-// Tower: Max 50
+// Tower: Max 40
 // Skills: Max 40
+// Hero: Max 30
 // Others: Max 20
 export const MAX_UPGRADE_LEVELS: Partial<Record<keyof UpgradeState, number>> = {
     baseHp: 20,
-    towerPower: 50, // Increased to 50
-    heroPower: 20,  
+    towerPower: 40, // Decreased to 40
+    heroPower: 30,  // Increased to 30
     minerSpeed: 20, 
     spawnSpeed: 20, 
-    arrowRainPower: 40, // Increased to 40
-    lightningPower: 40, // Increased to 40
-    freezePower: 40,    // Increased to 40
+    arrowRainPower: 40, 
+    lightningPower: 40, 
+    freezePower: 40,    
     swordDamage: 90, 
     archerDamage: 90,
     cavalryDamage: 90,

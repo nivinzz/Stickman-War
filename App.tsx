@@ -4,6 +4,7 @@ import GameCanvas from './components/GameCanvas';
 import ControlPanel from './components/ControlPanel';
 import UpgradeMenu from './components/UpgradeMenu';
 import { GameEngine } from './services/GameEngine';
+import { soundManager } from './services/SoundManager';
 import { UnitType, UpgradeState, GameLevel, Faction, UnitState, SpawnQueueItem, Language } from './types';
 import { INITIAL_GOLD, TRANS, MAX_HEROES, LEVEL_THEMES, MAX_LEVEL, MAX_POPULATION, POP_UPGRADE_COST, MAX_POP_UPGRADES, PASSIVE_GOLD_UPGRADE_COST, MAX_PASSIVE_GOLD_LEVEL, MAX_TOWERS } from './constants';
 
@@ -43,6 +44,7 @@ const App: React.FC = () => {
   const [level, setLevel] = useState<number>(1);
   const [lang, setLang] = useState<Language>('VN');
   const [engine, setEngine] = useState<GameEngine | null>(null);
+  const [isMuted, setIsMuted] = useState(soundManager.isMuted());
   
   // React state mirrors for UI
   const [gold, setGold] = useState(INITIAL_GOLD);
@@ -70,6 +72,18 @@ const App: React.FC = () => {
   const [paused, setPaused] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
 
+  // MUSIC & AMBIENCE EFFECT
+  useEffect(() => {
+    if (gameState === 'MENU' || gameState === 'LEVEL_SELECT') {
+        soundManager.playMenuMusic();
+    } else if (gameState === 'PLAYING') {
+        const theme = LEVEL_THEMES[(level - 1) % LEVEL_THEMES.length];
+        soundManager.playGameAmbience(theme.nameEn);
+    } else {
+        soundManager.stopAmbience();
+    }
+  }, [gameState, level]);
+
   const saveProgress = (newMaxLevel: number, currentUpgrades: UpgradeState, records: Record<number, number>) => {
       localStorage.setItem('stickman_max_level', newMaxLevel.toString());
       localStorage.setItem('stickman_level_records', JSON.stringify(records));
@@ -89,6 +103,23 @@ const App: React.FC = () => {
       const m = Math.floor(seconds / 60);
       const s = seconds % 60;
       return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+  
+  const toggleMute = () => {
+      const muted = soundManager.toggleMute();
+      setIsMuted(muted);
+      
+      // Refresh ambience state based on mute
+      if (muted) {
+          soundManager.stopAmbience();
+      } else {
+          // Restart context dependent sound
+          if (gameState === 'MENU' || gameState === 'LEVEL_SELECT') soundManager.playMenuMusic();
+          else if (gameState === 'PLAYING') {
+              const theme = LEVEL_THEMES[(level - 1) % LEVEL_THEMES.length];
+              soundManager.playGameAmbience(theme.nameEn);
+          }
+      }
   };
 
   // Sync engine state to React
@@ -130,6 +161,7 @@ const App: React.FC = () => {
 
       if (eng.victory) {
           setGameState('VICTORY');
+          soundManager.stopAmbience();
           let newRecords = { ...levelRecords };
           if (!newRecords[level] || currentSeconds < newRecords[level]) {
               newRecords[level] = currentSeconds;
@@ -144,7 +176,10 @@ const App: React.FC = () => {
               saveUpgradesOnly(eng.upgrades);
           }
       }
-      if (eng.gameOver) setGameState('DEFEAT');
+      if (eng.gameOver) {
+          setGameState('DEFEAT');
+          soundManager.stopAmbience();
+      }
   };
 
   const startGame = (lvl: number) => {
@@ -312,12 +347,20 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center p-4 font-sans text-slate-100 select-none overflow-hidden">
       
-      <div className="absolute top-4 left-4 z-50">
+      {/* GLOBAL SETTINGS (TOP LEFT) */}
+      <div className="absolute top-4 left-4 z-50 flex gap-2">
           <button 
              onClick={() => setLang(prev => prev === 'VN' ? 'EN' : 'VN')}
-             className="px-2 py-1 bg-slate-700 text-xs rounded border border-slate-500 hover:bg-slate-600"
+             className="px-2 py-1 bg-slate-700 text-xs rounded border border-slate-500 hover:bg-slate-600 font-bold"
           >
              {lang === 'VN' ? '🇬🇧 EN' : '🇻🇳 VN'}
+          </button>
+          
+          <button 
+             onClick={toggleMute}
+             className={`px-2 py-1 rounded border hover:bg-slate-600 text-xs font-bold ${isMuted ? 'bg-red-800 border-red-600 text-red-200' : 'bg-slate-700 border-slate-500 text-white'}`}
+          >
+             {isMuted ? '🔇 MUTED' : '🔊 SOUND'}
           </button>
       </div>
 
