@@ -167,6 +167,11 @@ export interface GameLevel {
   enemySmartAI: boolean;       
   enemyGoldDrip: number;
   isBoss: boolean; 
+  isMultiplayer?: boolean; // New flag for online matches
+  isSpectator?: boolean;   // New flag: Watch mode
+  opponentName?: string;   // Name of the enemy player
+  opponentElo?: number;    // Elo of the enemy (controls AI difficulty)
+  mapThemeIndex?: number;  // Specific visual theme (0-11)
 }
 
 // Granular Upgrades
@@ -184,6 +189,27 @@ export interface UpgradeState {
   maxPopUpgrade: number; // Number of extra slots purchased
   passiveGold: number; // Extra passive gold level (0 to 4, resulting in 1 to 5 total)
   towerPower: number; // New: Tower Damage Upgrade
+}
+
+export interface PlayerProfile {
+    name: string;
+    wins: number;
+    matches: number;
+    elo: number;
+    status?: 'IDLE' | 'WAITING' | 'PLAYING'; // For bot simulation
+}
+
+export interface GameRoom {
+    id: string;
+    roomIdDisplay: string; // e.g. #1234
+    name: string;
+    host: string;
+    hostElo: number;
+    guest?: string;
+    guestElo?: number;
+    status: 'WAITING' | 'PLAYING';
+    mapThemeIndex: number; // 0-11
+    timer?: number; // Simulation timer for bot matches
 }
 
 export type Language = 'VN' | 'EN';

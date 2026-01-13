@@ -77,49 +77,81 @@ export class GameEngine {
     this.playerMaxBaseHp = BASE_HP * (1 + (upgrades.baseHp * 0.1));
     this.playerBaseHp = this.playerMaxBaseHp;
     
-    // --- DIFFICULTY SCALING ---
-    // Start VERY weak, scale gently.
-    let hpMultiplier = 0.8 + (level.level * 0.05); // Level 1: 0.85x HP (Weak)
-    if (level.level > 10) hpMultiplier = 1.3 + ((level.level - 10) * 0.08);
-    if (level.isBoss) hpMultiplier *= 2.0;
-    
-    this.enemyMaxBaseHp = BASE_HP * hpMultiplier;
-    this.enemyBaseHp = this.enemyMaxBaseHp;
-    
-    // --- AI STARTING GOLD ---
-    // Level 1: 50 Gold (Just enough for a miner/sword)
-    // Level 50: 550 Gold
-    this.enemyGold = 40 + (level.level * 10); 
-    
-    // --- FREE TOWER FOR AI LEVEL 5+ ---
-    this.enemyTowers = 0;
-    if (level.level >= 5) {
-        this.enemyTowers = 1;
-        if (level.level >= 20) this.enemyTowers = 2;
-        if (level.level >= 40) this.enemyTowers = 3;
+    // --- DIFFICULTY & ONLINE SCALING ---
+    if (level.isMultiplayer) {
+        // ONLINE: Fair Start
+        this.playerMaxBaseHp = BASE_HP; // Reset player HP bonus
+        this.playerBaseHp = BASE_HP;
+        this.enemyMaxBaseHp = BASE_HP;
+        this.enemyBaseHp = BASE_HP;
+        this.enemyGold = INITIAL_GOLD;
+        this.enemyTowers = 0;
+        
+        // AI SCALE BY ELO
+        // Base Elo ~1000. Max ~2500.
+        const elo = level.opponentElo || 1000;
+        const scale = Math.max(0, (elo - 800) / 100); // 1000 -> 2, 2000 -> 12
+        
+        const tier = Math.floor(scale);
+        
+        this.enemyUpgrades = {
+            baseHp: 0, 
+            swordDamage: tier, 
+            archerDamage: tier, 
+            cavalryDamage: tier, 
+            spawnSpeed: Math.floor(tier * 0.5),
+            arrowRainPower: Math.floor(tier * 0.3), 
+            lightningPower: Math.floor(tier * 0.3), 
+            freezePower: Math.floor(tier * 0.3), 
+            heroPower: Math.floor(tier * 0.5),
+            minerSpeed: Math.floor(tier * 0.8), 
+            maxPopUpgrade: 0, 
+            passiveGold: 0, 
+            towerPower: Math.floor(tier * 0.5)
+        };
+
+        // If Spectator, Player side is ALSO AI (Simulated)
+        // Reset player upgrades to base for fairness unless we track P1 upgrades
+        if (level.isSpectator) {
+            this.upgrades = { ...this.enemyUpgrades }; // Assume similar skill for basic spectator logic
+        }
+    } else {
+        // OFFLINE: Campaign Scaling
+        let hpMultiplier = 0.8 + (level.level * 0.05); // Level 1: 0.85x HP (Weak)
+        if (level.level > 10) hpMultiplier = 1.3 + ((level.level - 10) * 0.08);
+        if (level.isBoss) hpMultiplier *= 2.0;
+        
+        this.enemyMaxBaseHp = BASE_HP * hpMultiplier;
+        this.enemyBaseHp = this.enemyMaxBaseHp;
+        
+        this.enemyGold = 40 + (level.level * 10); 
+        
+        this.enemyTowers = 0;
+        if (level.level >= 5) {
+            this.enemyTowers = 1;
+            if (level.level >= 20) this.enemyTowers = 2;
+            if (level.level >= 40) this.enemyTowers = 3;
+        }
+
+        const baseAILevel = Math.max(0, Math.floor((level.level - 3) * 0.5)); 
+        const bonusDmg = Math.max(0, Math.floor((level.level - 5) / 4));
+
+        this.enemyUpgrades = {
+            baseHp: baseAILevel,
+            swordDamage: baseAILevel + bonusDmg,
+            archerDamage: baseAILevel + bonusDmg,
+            cavalryDamage: baseAILevel + bonusDmg,
+            spawnSpeed: Math.min(20, Math.floor(level.level / 2)), 
+            arrowRainPower: baseAILevel,
+            lightningPower: baseAILevel,
+            freezePower: baseAILevel,
+            heroPower: baseAILevel,
+            minerSpeed: Math.min(30, baseAILevel),
+            maxPopUpgrade: Math.floor(level.level / 5), 
+            passiveGold: Math.min(5, Math.floor(level.level / 10)), 
+            towerPower: baseAILevel
+        };
     }
-
-    // --- AI UPGRADE LEVELS (Reduced Scaling) ---
-    // Level 1: 0 upgrades.
-    // Level 5: 1 upgrade.
-    const baseAILevel = Math.max(0, Math.floor((level.level - 3) * 0.5)); 
-    const bonusDmg = Math.max(0, Math.floor((level.level - 5) / 4));
-
-    this.enemyUpgrades = {
-        baseHp: baseAILevel,
-        swordDamage: baseAILevel + bonusDmg,
-        archerDamage: baseAILevel + bonusDmg,
-        cavalryDamage: baseAILevel + bonusDmg,
-        spawnSpeed: Math.min(20, Math.floor(level.level / 2)), 
-        arrowRainPower: baseAILevel,
-        lightningPower: baseAILevel,
-        freezePower: baseAILevel,
-        heroPower: baseAILevel,
-        minerSpeed: Math.min(30, baseAILevel),
-        maxPopUpgrade: Math.floor(level.level / 5), 
-        passiveGold: Math.min(5, Math.floor(level.level / 10)), 
-        towerPower: baseAILevel
-    };
 
     this.initEnvironment();
   }
@@ -308,52 +340,53 @@ export class GameEngine {
 
   queueUnit(type: UnitType, faction: Faction) {
       if (faction === Faction.PLAYER) {
+          // In Spectator Mode, AI calls queueUnit for Player, so we allow it.
+          // In normal mode, UI calls it, and paused check is valid.
+          // To be safe, just check paused.
           if (!this.started || this.paused) return;
       }
       
       const isPlayer = faction === Faction.PLAYER;
       const activeUnits = this.units.filter(u => u.faction === faction && u.state !== UnitState.DEAD && u.state !== UnitState.DIE);
       const queueItems = isPlayer ? this.playerQueue : this.enemyQueue;
+      const upgrades = isPlayer ? this.upgrades : this.enemyUpgrades;
       
       if (type === UnitType.HERO) {
           const heroCount = activeUnits.filter(u => u.type === UnitType.HERO).length + queueItems.filter(q => q.type === UnitType.HERO).length;
           if (heroCount >= MAX_HEROES) return;
       } else {
           const normalCount = activeUnits.filter(u => u.type !== UnitType.HERO).length + queueItems.filter(q => q.type !== UnitType.HERO).length;
-          let maxPop = MAX_POPULATION;
-          if (isPlayer) maxPop += this.upgrades.maxPopUpgrade;
-          else maxPop += this.enemyUpgrades.maxPopUpgrade;
-          
+          let maxPop = MAX_POPULATION + upgrades.maxPopUpgrade;
           if (normalCount >= maxPop) return;
       }
 
       const statsConfig = UNIT_CONFIG[type];
+      const cost = statsConfig.cost;
       
       if (isPlayer) {
-          if (this.gold < statsConfig.cost) return;
-          this.gold -= statsConfig.cost;
-          soundManager.playGold(); 
+          if (this.gold < cost) return;
+          this.gold -= cost;
+          // Only play sound if NOT spectator, to avoid noise chaos
+          if (!this.level.isSpectator) soundManager.playGold(); 
       } else {
-          if (this.enemyGold < statsConfig.cost) return;
-          this.enemyGold -= statsConfig.cost;
+          if (this.enemyGold < cost) return;
+          this.enemyGold -= cost;
       }
 
       let spawnTime = statsConfig.spawnTime;
-      if (isPlayer) {
-          spawnTime = Math.max(30, spawnTime * (1 - this.upgrades.spawnSpeed * 0.1)); 
-      } else {
-          // AI Spawn Speed Scaling
-          const baseSpeedBuff = this.level.level * 0.02;
-          const upgradeBuff = this.enemyUpgrades.spawnSpeed * 0.1;
-          spawnTime = Math.max(30, spawnTime * (1 - (baseSpeedBuff + upgradeBuff))); 
-          
-          // --- AI DIFFICULTY SPAWN RATES ---
-          // Updated based on user feedback: Regular but moderate
-          if (this.level.level === 1) spawnTime *= 1.8; 
-          else if (this.level.level < 5) spawnTime *= 1.4; 
-          
-          if (this.level.level > 45 && type !== UnitType.HERO) spawnTime = 30; 
-          if (this.level.isBoss) spawnTime *= 0.8; 
+      // Apply upgrades
+      spawnTime = Math.max(30, spawnTime * (1 - upgrades.spawnSpeed * 0.1)); 
+
+      // Campaign AI Logic overrides
+      if (!isPlayer && !this.level.isMultiplayer) {
+           const baseSpeedBuff = this.level.level * 0.02;
+           spawnTime = Math.max(30, spawnTime * (1 - baseSpeedBuff));
+           
+           if (this.level.level === 1) spawnTime *= 1.8; 
+           else if (this.level.level < 5) spawnTime *= 1.4; 
+           
+           if (this.level.level > 45 && type !== UnitType.HERO) spawnTime = 30; 
+           if (this.level.isBoss) spawnTime *= 0.8; 
       }
 
       const item: SpawnQueueItem = {
@@ -376,7 +409,8 @@ export class GameEngine {
           if (item.remainingTime <= 0) {
               this.spawnUnitNow(item.type, item.faction);
               this.playerQueue.shift();
-              soundManager.playSpawn();
+              // Only play spawn sound if NOT spectator
+              if (!this.level.isSpectator) soundManager.playSpawn();
           }
       }
       
@@ -404,8 +438,8 @@ export class GameEngine {
     let stats = calculateUnitStats(type, unitUpgradeLevel);
 
     let sizeMultiplier = 1;
-    if (!isPlayer) {
-        // Reduced stat scaling for AI units
+    // Campaign Boss Scaling Logic (Only applies to Enemy in Offline)
+    if (!isPlayer && !this.level.isMultiplayer) {
         const levelScaling = 1 + (this.level.level * 0.03); 
         stats.hp = Math.floor(stats.hp * levelScaling);
         stats.maxHp = Math.floor(stats.maxHp * levelScaling);
@@ -457,7 +491,7 @@ export class GameEngine {
           const u = this.units[index];
           this.units.splice(index, 1);
           this.createParticles(u.x, GROUND_Y, 5, '#ffffff', true);
-          if(faction === Faction.PLAYER) soundManager.playDie(); 
+          if(faction === Faction.PLAYER && !this.level.isSpectator) soundManager.playDie(); 
           this.onStateChange(this);
       }
   }
@@ -469,7 +503,8 @@ export class GameEngine {
       
       if (unit.faction === Faction.ENEMY) {
           this.gold += amount;
-          soundManager.playGold();
+          // If spectator, don't play money sound
+          if (!this.level.isSpectator) soundManager.playGold();
       } else {
           this.enemyGold += amount;
       }
@@ -508,7 +543,7 @@ export class GameEngine {
   spawnArrowRain(x: number, faction: Faction, powerLevel: number) {
     const isPlayer = faction === Faction.PLAYER;
     const durationMultiplier = 1 + (powerLevel * 0.1);
-    const durationFrames = 300 * durationMultiplier; // INCREASED DURATION to 5s base (was 180)
+    const durationFrames = 300 * durationMultiplier; 
     
     if (isPlayer) {
         this.skillActiveTimers.ARROW_RAIN = durationFrames;
@@ -516,7 +551,6 @@ export class GameEngine {
     }
 
     const arrowCount = Math.floor(durationFrames / 5);
-    // NEW FORMULA: Base 55 (increased from 50), +20% per level
     const damage = 55 * (1 + (powerLevel * 0.2));
 
     for (let i = 0; i < arrowCount; i++) {
@@ -541,9 +575,6 @@ export class GameEngine {
 
   spawnLightning(x: number, faction: Faction, powerLevel: number) {
     const isPlayer = faction === Faction.PLAYER;
-    
-    // Create a new active storm
-    // INCREASED DURATION: 5 seconds (300 frames) - was 180
     this.activeStorms.push({
         id: Math.random().toString(),
         faction,
@@ -557,26 +588,20 @@ export class GameEngine {
         this.skillMaxDurations.LIGHTNING = 300;
     }
     
-    // Initial sound
     soundManager.playSkill('Lightning');
   }
 
   updateLightning() {
-      // 1. Process Active Storms (Spawning continuous bolts)
+      // 1. Process Active Storms
       this.activeStorms.forEach(storm => {
           storm.duration--;
           
-          // INCREASED DENSITY: Spawn bolt every 12 frames (was 15) -> 20% increase
           if (this.frame % 12 === 0) {
-              // Random spread around the target point
               const offsetX = (Math.random() - 0.5) * 200; 
               const boltX = storm.x + offsetX;
               
-              // Damage per bolt
-              // NEW FORMULA: Base 44 (increased from 40), +20% per level
               const damage = 44 * (1 + (storm.level * 0.2));
               
-              // Create Visual Bolt (Zigzag lines)
               const points: {x:number, y:number}[] = [];
               let curX = boltX;
               let curY = -400; // Sky
@@ -587,10 +612,8 @@ export class GameEngine {
                  curX = nextX;
                  curY = nextY;
               }
-              // Ensure anchor on ground
               points[points.length-1].y = GROUND_Y;
 
-              // Add projectile for rendering
               this.projectiles.push({
                   id: `bolt_${Math.random()}`,
                   x: boltX,
@@ -599,34 +622,31 @@ export class GameEngine {
                   type: 'LIGHTNING_BOLT', 
                   rotation: 0,
                   points: points,
-                  opacity: 1 // Start fully visible
+                  opacity: 1 
               });
               
-              // Apply Damage in small radius around this specific bolt
               const targets = this.units.filter(u => 
                   u.faction !== storm.faction && 
                   u.state !== UnitState.DIE &&
-                  Math.abs(u.x - boltX) < 60 // 60px radius per bolt
+                  Math.abs(u.x - boltX) < 60 
               );
               
               if (targets.length > 0) {
                   targets.forEach(t => {
                       t.stats.hp -= damage;
-                      this.createParticles(t.x, t.y, 5, storm.faction === Faction.PLAYER ? '#0ea5e9' : '#f87171'); // Colored Sparks
+                      this.createParticles(t.x, t.y, 5, storm.faction === Faction.PLAYER ? '#0ea5e9' : '#f87171'); 
                       if (t.stats.hp <= 0) {
                           t.state = UnitState.DIE;
                           this.rewardKill(t);
                       }
                   });
-                  this.triggerScreenShake(2); // Mini shake per bolt
+                  this.triggerScreenShake(2); 
               }
           }
       });
       
-      // Cleanup finished storms
       this.activeStorms = this.activeStorms.filter(s => s.duration > 0);
 
-      // 2. Process Projectile Visuals (Fading)
       this.projectiles.forEach(p => {
           if (p.type === 'LIGHTNING_BOLT') {
               if (p.opacity !== undefined) {
@@ -638,26 +658,15 @@ export class GameEngine {
           }
       });
       
-      // Keep active projectiles
       this.projectiles = this.projectiles.filter(p => p.active);
   }
 
   spawnFreeze(x: number, faction: Faction, powerLevel: number) {
       const isPlayer = faction === Faction.PLAYER;
       const range = 200; 
-      // INCREASED DURATION: Base 8 seconds (480 frames) - was 5s
       const freezeDurationFrames = (8 * (1 + (powerLevel * 0.05))) * 60;
-      
-      // SCALING STATS
-      // Slow Factor: Starts at 0.5 (50%), drops by 0.02 per level (e.g., Lvl 10 = 0.3)
-      // Minimum slow is 0.1 (90% reduced speed)
       const scaledSlow = Math.max(0.1, 0.5 - (powerLevel * 0.02)); 
-      
-      // DoT: 2% of Max HP per second (Fixed per request, duration scaling makes it deadlier)
       const dotPercentage = 0.02; 
-      
-      // Explosion: Base 5% + 20% scaling per level
-      // 0.05 * (1 + 0.2*lvl)
       const explosionPercentage = 0.05 * (1 + (powerLevel * 0.2));
 
       if (isPlayer) {
@@ -665,7 +674,6 @@ export class GameEngine {
           this.skillMaxDurations.FREEZE = freezeDurationFrames;
       }
 
-      // Generate "Jagged Ice Strip" Visuals
       const shards: IceShard[] = [];
       const width = range * 2;
       const numShards = 20;
@@ -697,8 +705,8 @@ export class GameEngine {
           width: range * 2,
           height: 20,
           duration: freezeDurationFrames,
-          damagePercent: dotPercentage, // Used for DoT
-          explosionDamagePercent: explosionPercentage, // New property for final burst
+          damagePercent: dotPercentage, 
+          explosionDamagePercent: explosionPercentage, 
           slowFactor: scaledSlow,
           faction: faction,
           visuals: shards
@@ -708,12 +716,10 @@ export class GameEngine {
   }
 
   updateHazards() {
-      // Loop backwards to allow safe removal
       for (let i = this.hazards.length - 1; i >= 0; i--) {
           const h = this.hazards[i];
           h.duration--;
           
-          // Visual: Rising cold particles
           if (this.frame % 30 === 0) {
                const px = h.x + Math.random() * h.width;
                this.createParticles(px, GROUND_Y, 1, '#bae6fd', false);
@@ -723,7 +729,6 @@ export class GameEngine {
               const centerX = h.x + (h.width / 2);
               const range = h.width / 2;
               
-              // Find targets in zone
               const targets = this.units.filter(u => 
                   u.faction !== h.faction &&
                   u.state !== UnitState.DIE &&
@@ -731,12 +736,8 @@ export class GameEngine {
                   Math.abs(u.x - centerX) < range
               );
 
-              // ACTIVE EFFECTS (Every Frame)
               targets.forEach(t => {
-                  // 1. Apply Slow
                   t.isSlowed = true; 
-                  
-                  // 2. Apply DoT (2% per second -> 0.02 / 60 per frame)
                   const dotDamage = (t.stats.maxHp * h.damagePercent) / 60;
                   t.stats.hp -= dotDamage;
                   
@@ -746,9 +747,7 @@ export class GameEngine {
                   }
               });
 
-              // EXPIRY LOGIC: EXPLOSION
               if (h.duration <= 0) {
-                  // Shatter Visuals (Explode outward)
                   for(let k=0; k<20; k++) {
                       this.particles.push({
                           id: Math.random().toString(),
@@ -764,13 +763,12 @@ export class GameEngine {
                       });
                   }
                   
-                  // Apply Explosion Damage
                   const boomDmgPct = h.explosionDamagePercent || 0.05;
 
                   targets.forEach(t => {
                       const explosionDmg = t.stats.maxHp * boomDmgPct; 
                       t.stats.hp -= explosionDmg;
-                      this.createParticles(t.x, t.y - 20, 10, '#ffffff'); // White explosion burst
+                      this.createParticles(t.x, t.y - 20, 10, '#ffffff'); 
                       if (t.stats.hp <= 0) {
                           t.state = UnitState.DIE;
                           this.rewardKill(t);
@@ -778,13 +776,11 @@ export class GameEngine {
                   });
                   
                   this.triggerScreenShake(5);
-                  soundManager.playAttack('CAVALRY'); // Heavy shatter sound
+                  soundManager.playAttack('CAVALRY'); 
                   
-                  // Remove hazard
                   this.hazards.splice(i, 1);
               }
           } else {
-               // Generic expiry for other hazards if any
                if (h.duration <= 0) this.hazards.splice(i, 1);
           }
       }
@@ -862,8 +858,6 @@ export class GameEngine {
   manageVanguard() {
       if (this.frame % 30 !== 0) return; 
 
-      // 1. Get all combat-capable units (including Heroes now)
-      // Miners are excluded as they are not combat units
       const army = this.units.filter(u => 
           u.faction === Faction.PLAYER && 
           u.type !== UnitType.MINER && 
@@ -871,33 +865,23 @@ export class GameEngine {
           u.state !== UnitState.DIE
       );
 
-      // 2. Threshold Check: Must have at least 5 units to split
       if (army.length < 5) {
-          // If less than 5, Force everyone to stay at flag (Vanguard = false)
           army.forEach(u => u.isVanguard = false);
           return;
       }
 
-      // 3. Calculate how many should attack based on percentage
       const targetVanguardCount = Math.floor(army.length * this.vanguardPercentage);
-
-      // 4. Determine current Vanguard
       let currentVanguard = army.filter(u => u.isVanguard);
 
       if (currentVanguard.length < targetVanguardCount) {
-          // Need more vanguard: Pick non-vanguard units closest to enemy (High X)
           const nonVanguard = army.filter(u => !u.isVanguard).sort((a,b) => b.x - a.x);
           const needed = targetVanguardCount - currentVanguard.length;
-          
           for(let i=0; i<needed && i<nonVanguard.length; i++) {
               nonVanguard[i].isVanguard = true;
           }
       } else if (currentVanguard.length > targetVanguardCount) {
-          // Too many vanguard: Recall units furthest BACK (Low X)
-          // Sort by X ascending (Left to Right)
           const surplus = currentVanguard.length - targetVanguardCount;
           currentVanguard.sort((a,b) => a.x - b.x); 
-          
           for(let i=0; i<surplus; i++) {
               currentVanguard[i].isVanguard = false;
           }
@@ -906,26 +890,16 @@ export class GameEngine {
 
   fireArrow(unit: Unit, target: Unit) {
     const dx = target.x - unit.x;
-    // AIM FROM NECK (Approx 75% height up)
     const startY = unit.y - (unit.height * 0.75);
-    const speed = 20; // Increased speed for flatter shot
+    const speed = 20; 
 
-    // AIM AT UPPER BODY of target to compensate for gravity
-    // Aim at 60% height instead of 70% to ensure center mass hit with drop
     const ty = target.y - (target.height * 0.6); 
     
-    // BALLISTIC CALCULATION
-    // We need to hit (dx, dy).
-    // Vertical drop due to gravity over time t: h = 0.5 * g * t^2
-    // t = dist / speed
     const directDist = Math.sqrt(dx*dx + (ty - startY)*(ty - startY));
     const flightTime = directDist / speed;
     const gravityDrop = 0.5 * GRAVITY * flightTime * flightTime;
     
-    // We aim HIGHER by exactly the amount gravity will pull it down
-    // targetY is "higher" (smaller value) than ty
     const targetY = ty - gravityDrop;
-    
     const angle = Math.atan2(targetY - startY, dx);
 
     this.projectiles.push({
@@ -940,7 +914,7 @@ export class GameEngine {
       active: true,
       type: 'ARROW',
       rotation: angle,
-      targetId: target.id // Assign target for tracking
+      targetId: target.id 
     });
     
     soundManager.playAttack('ARCHER');
@@ -949,14 +923,11 @@ export class GameEngine {
   fireArrowAtBase(unit: Unit, baseX: number) {
     const dx = baseX - unit.x;
     const startY = unit.y - (unit.height * 0.75);
-    const speed = 20; // Increased speed
+    const speed = 20; 
 
-    // Target the "Heart" of the castle structure
-    // Castle draws from -100 to -160 (height). Center is around -130.
     const ty = GROUND_Y - 130;
     
-    // Ballistic Calc
-    const dist = Math.abs(dx); // X-distance dominates
+    const dist = Math.abs(dx); 
     const flightTime = dist / speed;
     const gravityDrop = 0.5 * GRAVITY * flightTime * flightTime;
     
@@ -984,7 +955,6 @@ export class GameEngine {
       const isPlayer = unit.faction === Faction.PLAYER;
       const enemyBaseX = isPlayer ? ENEMY_BASE_X : PLAYER_BASE_X;
 
-      // --- TARGET ACQUISITION (Universal) ---
       let target: Unit | null = null;
       let distToTarget = Infinity;
 
@@ -1002,51 +972,46 @@ export class GameEngine {
       const attackSpeed = Math.max(10, unit.stats.attackSpeed); 
       const isLowHp = unit.stats.hp < unit.stats.maxHp * 0.4;
       
-      // Archer Engagement Logic: Stop moving if in range (0.85 * Max Range to be safe)
       const engageDistance = unit.type === UnitType.ARCHER ? range * 0.85 : 250;
       
-      // --- TACTICAL MOVEMENT LOGIC ---
       let movingToFlag = false;
       let moveDir = isPlayer ? 1 : -1;
-      let targetPos = unit.x; // Default to stay put
+      let targetPos = unit.x; 
 
       // PLAYER TACTICS
       if (isPlayer) {
-          if (unit.isVanguard) {
-              // Vanguard: Always Charge to front
-              targetPos = ENEMY_BASE_X - 100;
-              movingToFlag = false; // Allow stopping to fight
-          } else if (this.rallyPoint !== null) {
-              // Rally Point Logic
-              let formationOffset = 0;
-              
-              if (unit.type === UnitType.ARCHER) {
-                  // Archers: Always behind (-140 to -180px) relative to flag
-                  formationOffset = -140 - (parseInt(unit.id.substr(0, 3), 36) % 40);
-              } else {
-                  // Melee (Sword, Cav) + Hero: Around the flag (-30 to +50px)
-                  formationOffset = (parseInt(unit.id.substr(0, 3), 36) % 80) - 30;
-              }
-              
-              targetPos = this.rallyPoint + formationOffset;
-              
-              if (isLowHp && this.frame % 30 === 0 && Math.random() < 0.3) {
-                  targetPos -= 100; // Retreat momentarily
-              }
+          // If Spectator Mode, AI drives tactics for player too
+          if (this.level.isSpectator) {
+               targetPos = ENEMY_BASE_X;
+               movingToFlag = true;
+          } else {
+              if (unit.isVanguard) {
+                  targetPos = ENEMY_BASE_X - 100;
+                  movingToFlag = false; 
+              } else if (this.rallyPoint !== null) {
+                  let formationOffset = 0;
+                  if (unit.type === UnitType.ARCHER) {
+                      formationOffset = -140 - (parseInt(unit.id.substr(0, 3), 36) % 40);
+                  } else {
+                      formationOffset = (parseInt(unit.id.substr(0, 3), 36) % 80) - 30;
+                  }
+                  targetPos = this.rallyPoint + formationOffset;
+                  
+                  if (isLowHp && this.frame % 30 === 0 && Math.random() < 0.3) {
+                      targetPos -= 100; 
+                  }
 
-              // STOP if we have a target within our specific engagement distance
-              // OR if we are in range of the enemy base
-              if ((target && distToTarget <= engageDistance) || (Math.abs(unit.x - enemyBaseX) <= range)) {
-                  movingToFlag = false; // Engage!
-              } else {
-                  movingToFlag = true;
+                  if ((target && distToTarget <= engageDistance) || (Math.abs(unit.x - enemyBaseX) <= range)) {
+                      movingToFlag = false; 
+                  } else {
+                      movingToFlag = true;
+                  }
               }
-          }
-          // Patrol Logic (if active)
-          else if (this.patrolPoint !== null) {
-               targetPos = this.patrolPoint;
-               if (target && distToTarget <= engageDistance) movingToFlag = false;
-               else movingToFlag = true;
+              else if (this.patrolPoint !== null) {
+                   targetPos = this.patrolPoint;
+                   if (target && distToTarget <= engageDistance) movingToFlag = false;
+                   else movingToFlag = true;
+              }
           }
       } 
       // AI TACTICS
@@ -1054,7 +1019,6 @@ export class GameEngine {
           if (this.aiState === 'DEFEND') {
               const defendLine = ENEMY_BASE_X - TOWER_RANGE - 150;
               let formationOffset = 0;
-              
               if (unit.type === UnitType.ARCHER) {
                   formationOffset = 140 + (parseInt(unit.id.substr(0, 3), 36) % 40);
               } else {
@@ -1074,41 +1038,32 @@ export class GameEngine {
               }
           } else if (this.aiState === 'RETREAT') {
               targetPos = ENEMY_BASE_X; 
-              movingToFlag = true; // Force retreat
+              movingToFlag = true; 
           } else if (this.aiState === 'MASSING') {
               const massPoint = ENEMY_BASE_X - TOWER_RANGE - 100;
               targetPos = massPoint;
               if (target && distToTarget <= engageDistance) movingToFlag = false;
               else movingToFlag = true;
           } else {
-              // ATTACK Mode
               targetPos = PLAYER_BASE_X;
-              movingToFlag = false; // Attack Move
-          }
-      }
-
-      // --- ARCHER KITING (RETREAT WHILE SHOOTING) ---
-      // If Archer is threatened by MELEE range (approx 150px)
-      if (unit.type === UnitType.ARCHER && target && distToTarget < 150) {
-          const kiteDir = isPlayer ? -1 : 1; // Player runs Left, Enemy runs Right
-          const canRetreat = isPlayer ? unit.x > 20 : unit.x < WORLD_WIDTH - 20; // Bound check
-          
-          if (canRetreat) {
-              // Move away from enemy
-              // KITING SPEED REDUCTION: 80% of normal speed
-              unit.x += kiteDir * (unit.stats.speed * 0.8) * speedMult;
-              // Force combat mode check below so we can shoot
               movingToFlag = false; 
           }
       }
 
-      // --- EXECUTE COMBAT OR MOVEMENT ---
-      
+      if (unit.type === UnitType.ARCHER && target && distToTarget < 150) {
+          const kiteDir = isPlayer ? -1 : 1; 
+          const canRetreat = isPlayer ? unit.x > 20 : unit.x < WORLD_WIDTH - 20; 
+          
+          if (canRetreat) {
+              unit.x += kiteDir * (unit.stats.speed * 0.8) * speedMult;
+              movingToFlag = false; 
+          }
+      }
+
       const canAttackUnit = target && distToTarget <= range;
       const canAttackBase = Math.abs(unit.x - enemyBaseX) <= range;
 
       if (!movingToFlag && (canAttackUnit || canAttackBase)) {
-          // COMBAT MODE
           unit.state = UnitState.ATTACK;
           
           if (isLowHp && this.frame % 15 === 0 && Math.random() > 0.6) {
@@ -1122,8 +1077,6 @@ export class GameEngine {
                   if (unit.type === UnitType.ARCHER) this.fireArrow(unit, target);
                   else {
                       target.stats.hp -= unit.stats.damage;
-                      
-                      // SPECIFIC SOUNDS
                       if (unit.type === UnitType.CAVALRY) soundManager.playSpearThrust();
                       else soundManager.playMetalClash();
                       
@@ -1144,13 +1097,12 @@ export class GameEngine {
                       if (isPlayer) this.enemyBaseHp -= unit.stats.damage;
                       else this.playerBaseHp -= unit.stats.damage;
                       
-                      soundManager.playCastleHit(); // Hit Base Sound
+                      soundManager.playCastleHit(); 
                       this.triggerScreenShake(1);
                   }
               }
           }
       } else {
-          // MOVEMENT MODE
           if (movingToFlag && Math.abs(unit.x - targetPos) > 10) {
               unit.state = UnitState.MOVE;
               moveDir = targetPos > unit.x ? 1 : -1;
@@ -1163,7 +1115,6 @@ export class GameEngine {
               }
           }
           else {
-              // Default Attack Move
               unit.state = UnitState.MOVE;
               moveDir = isPlayer ? 1 : -1;
               unit.x += moveDir * unit.stats.speed * speedMult;
@@ -1203,13 +1154,7 @@ export class GameEngine {
           if (unit.freezeTimer > 0) {
               speedMult = 0; // Hard Stun
           } else if (unit.isSlowed) {
-              // Calculate dynamic slow based on opponent's freeze level
-              // If I am Enemy, I am slowed by Player's Freeze Power
               const opponentPower = unit.faction === Faction.ENEMY ? this.upgrades.freezePower : this.enemyUpgrades.freezePower;
-
-              // Base slow 50%, +2% per level
-              // e.g., Level 0 = 50% slow (0.5 mult)
-              // Level 10 = 70% slow (0.3 mult)
               const slowPercent = 0.5 + (opponentPower * 0.02);
               speedMult = Math.max(0.1, 1 - slowPercent);
           }
@@ -1246,7 +1191,6 @@ export class GameEngine {
            if (Math.abs(unit.x - base) < 5) {
               if (isPlayer) {
                   this.gold += (unit.goldCarrying || 0);
-                  // soundManager.playGold(); // REMOVED PER REQUEST
               } else {
                   this.enemyGold += (unit.goldCarrying || 0);
               }
@@ -1266,11 +1210,9 @@ export class GameEngine {
               continue;
           }
 
-          // Special tracking logic for Homing Arrows
           if (p.type === 'ARROW' && p.targetId) {
                 const target = this.units.find(u => u.id === p.targetId);
                 if (target && target.state !== UnitState.DEAD && target.state !== UnitState.DIE) {
-                    // Homing: Calculate direct vector to target's body center
                     const tx = target.x;
                     const ty = target.y - target.height / 2;
                     const dx = tx - p.x;
@@ -1279,11 +1221,9 @@ export class GameEngine {
                     const speed = 15;
 
                     if (dist < 20) {
-                        // Force collision in next logic block
                         p.x = tx;
                         p.y = ty;
                     } else {
-                        // Steer velocity towards target (Perfect homing)
                         p.vx = (dx / dist) * speed;
                         p.vy = (dy / dist) * speed;
                         p.x += p.vx;
@@ -1291,7 +1231,6 @@ export class GameEngine {
                         p.rotation = Math.atan2(p.vy, p.vx);
                     }
                 } else {
-                    // Target dead? Lose homing, fall to ground
                     p.targetId = undefined;
                     p.vy += GRAVITY;
                     p.x += p.vx;
@@ -1300,18 +1239,14 @@ export class GameEngine {
           } else if (p.type === 'ARROW' || p.type === 'TOWER_SHOT') {
               p.x += p.vx;
               p.y += p.vy;
-              p.vy += GRAVITY; // Regular arrows still have gravity
+              p.vy += GRAVITY; 
               p.rotation = Math.atan2(p.vy, p.vx);
           }
 
-          // --- BASE COLLISION CHECK ---
           if (p.type === 'ARROW') {
                const isPlayerShot = p.faction === Faction.PLAYER;
                const targetBaseX = isPlayerShot ? ENEMY_BASE_X : PLAYER_BASE_X;
                
-               // EXPANDED HITBOX FOR BASE
-               // Width: +/- 120 (Total 240px wide) - Ensure close range hits
-               // Height: Ground to -250 (Tall enough to catch high arcs)
                if (Math.abs(p.x - targetBaseX) < 120 && p.y > (GROUND_Y - 250) && p.y < GROUND_Y) {
                    if (isPlayerShot) {
                        this.enemyBaseHp -= p.damage;
@@ -1319,10 +1254,8 @@ export class GameEngine {
                        this.playerBaseHp -= p.damage;
                    }
                    p.active = false;
-                   this.createParticles(p.x, p.y, 3, '#94a3b8'); // Stone chip color
-                   
-                   soundManager.playCastleHit(); // Base hit sound
-                   
+                   this.createParticles(p.x, p.y, 3, '#94a3b8'); 
+                   soundManager.playCastleHit(); 
                    continue;
                }
           }
@@ -1332,7 +1265,6 @@ export class GameEngine {
               continue;
           }
 
-          // Collision Detection
           if (p.type === 'ARROW' || p.type === 'TOWER_SHOT') {
               const targets = this.units.filter(u => 
                   u.faction !== p.faction && 
@@ -1394,6 +1326,43 @@ export class GameEngine {
       }
   }
 
+  updatePlayerAI() {
+      // Simulates the player side when in Spectator Mode
+      // Very similar to updateAI but target Faction.PLAYER
+      const playerUnits = this.units.filter(u => u.faction === Faction.PLAYER && u.state !== UnitState.DEAD && u.state !== UnitState.DIE);
+      const playerMiners = playerUnits.filter(u => u.type === UnitType.MINER).length;
+      
+      const targetMiners = 12;
+      const queueMiners = this.playerQueue.filter(q => q.type === UnitType.MINER).length;
+
+      if (playerMiners + queueMiners < targetMiners) {
+           this.queueUnit(UnitType.MINER, Faction.PLAYER);
+      } else {
+           if (this.gold >= 100) { 
+                const r = Math.random();
+                let type = UnitType.SWORDMAN;
+                if (r < 0.3) type = UnitType.ARCHER;
+                if (r < 0.1) type = UnitType.CAVALRY;
+                if (this.gold > 1000 && r < 0.05) type = UnitType.HERO;
+                this.queueUnit(type, Faction.PLAYER);
+           }
+      }
+
+      if (this.gold > 2000 && this.playerTowers < MAX_TOWERS) {
+           this.buyTower(Faction.PLAYER);
+      }
+
+      // Upgrade simulation
+      if (this.frame % 300 === 0 && this.gold > 500) {
+          const keys: (keyof UpgradeState)[] = ['swordDamage', 'archerDamage', 'spawnSpeed', 'minerSpeed'];
+          const pick = keys[Math.floor(Math.random() * keys.length)];
+          if (this.gold > 300) {
+              this.gold -= 300;
+              this.upgrades[pick]++;
+          }
+      }
+  }
+
   updateAI() {
       // 1. AI State Machine
       if (this.aiStateTimer > 0) {
@@ -1403,85 +1372,95 @@ export class GameEngine {
           if (this.aiState === 'ATTACK') {
               if (r < 0.4) { this.aiState = 'DEFEND'; this.aiStateTimer = 600; }
               else if (r < 0.6) { this.aiState = 'MASSING'; this.aiStateTimer = 400; }
-              else { this.aiStateTimer = 600; } // Keep Attacking
+              else { this.aiStateTimer = 600; } 
           } else if (this.aiState === 'DEFEND') {
               if (r < 0.5) { this.aiState = 'ATTACK'; this.aiStateTimer = 900; }
               else { this.aiState = 'MASSING'; this.aiStateTimer = 300; }
           } else if (this.aiState === 'MASSING') {
               this.aiState = 'ATTACK';
               this.aiStateTimer = 1200;
-          } else { // RETREAT
+          } else { 
               this.aiState = 'DEFEND';
               this.aiStateTimer = 300;
           }
       }
 
-      // 2. Spawn Logic
+      // 2. Spawn Logic (SIMULATING A PLAYER)
+      // In Multiplayer, AI behaves more aggressively and upgrades dynamically
       const enemyUnits = this.units.filter(u => u.faction === Faction.ENEMY && u.state !== UnitState.DEAD && u.state !== UnitState.DIE);
       const enemyMiners = enemyUnits.filter(u => u.type === UnitType.MINER).length;
       
-      // Target Miner Count: Base 3 + 1 per 2 levels, max 15
       const targetMiners = Math.min(15, 3 + Math.floor(this.level.level / 2));
-      
       const queueMiners = this.enemyQueue.filter(q => q.type === UnitType.MINER).length;
 
+      // Online AI: Prioritizes miners early, then balanced army
       if (enemyMiners + queueMiners < targetMiners) {
            this.queueUnit(UnitType.MINER, Faction.ENEMY);
       } else {
-           // Buy Combat Units
-           // Simple weighting
-           if (this.enemyGold >= 100) { // Min cost for sword
+           if (this.enemyGold >= 100) { 
                 const r = Math.random();
-                // Ratios change by level
                 let type = UnitType.SWORDMAN;
-                if (this.level.level >= 3 && r < 0.4) type = UnitType.ARCHER;
-                if (this.level.level >= 6 && r < 0.15) type = UnitType.CAVALRY;
-                if (this.level.level >= 10 && r < 0.05) type = UnitType.HERO;
+                // Smarter unit composition for Online
+                if (this.level.isMultiplayer) {
+                     if (r < 0.3) type = UnitType.ARCHER;
+                     if (r < 0.1) type = UnitType.CAVALRY;
+                     if (this.enemyGold > 1000 && r < 0.05) type = UnitType.HERO;
+                } else {
+                    if (this.level.level >= 3 && r < 0.4) type = UnitType.ARCHER;
+                    if (this.level.level >= 6 && r < 0.15) type = UnitType.CAVALRY;
+                    if (this.level.level >= 10 && r < 0.05) type = UnitType.HERO;
+                }
                 
                 this.queueUnit(type, Faction.ENEMY);
            }
       }
       
       // 3. Tower Buying
-      if (this.enemyGold > 2000 && this.enemyTowers < MAX_TOWERS && this.level.level >= 5) {
+      if (this.enemyGold > 2000 && this.enemyTowers < MAX_TOWERS && (this.level.level >= 5 || this.level.isMultiplayer)) {
            this.buyTower(Faction.ENEMY);
       }
       
       // 4. Skills Usage (Smart AI)
-      if (this.level.enemySmartAI) {
+      if (this.level.enemySmartAI || this.level.isMultiplayer) {
            const playerUnits = this.units.filter(u => u.faction === Faction.PLAYER && u.state !== UnitState.DEAD && u.state !== UnitState.DIE);
            if (playerUnits.length >= 4) {
-               // Calculate average position
                let sumX = 0;
                playerUnits.forEach(u => sumX += u.x);
                const avgX = sumX / playerUnits.length;
                
-               // Only use if within range
                if (avgX > this.enemyVisibleX) {
-                    // Arrow Rain
-                    if (this.enemySkillCooldowns.ARROW_RAIN <= 0 && this.level.level >= 4) {
+                    if (this.enemySkillCooldowns.ARROW_RAIN <= 0 && (this.level.level >= 4 || this.level.isMultiplayer)) {
                         this.spawnArrowRain(avgX, Faction.ENEMY, this.enemyUpgrades.arrowRainPower);
                         this.enemySkillCooldowns.ARROW_RAIN = SKILL_COOLDOWNS_FRAMES.ARROW_RAIN;
                     } 
-                    // Lightning
-                    else if (this.enemySkillCooldowns.LIGHTNING <= 0 && this.level.level >= 8) {
+                    else if (this.enemySkillCooldowns.LIGHTNING <= 0 && (this.level.level >= 8 || this.level.isMultiplayer)) {
                         this.spawnLightning(avgX, Faction.ENEMY, this.enemyUpgrades.lightningPower);
                         this.enemySkillCooldowns.LIGHTNING = SKILL_COOLDOWNS_FRAMES.LIGHTNING;
                     }
-                    // Freeze
-                    else if (this.enemySkillCooldowns.FREEZE <= 0 && this.level.level >= 12 && playerUnits.length > 8) {
+                    else if (this.enemySkillCooldowns.FREEZE <= 0 && (this.level.level >= 12 || this.level.isMultiplayer) && playerUnits.length > 8) {
                          this.spawnFreeze(avgX, Faction.ENEMY, this.enemyUpgrades.freezePower);
                          this.enemySkillCooldowns.FREEZE = SKILL_COOLDOWNS_FRAMES.FREEZE;
                     }
                }
            }
       }
+      
+      // 5. Online AI: Self Upgrade (Simulation)
+      if (this.level.isMultiplayer && this.frame % 300 === 0 && this.enemyGold > 500) {
+          // AI randomly upgrades stuff
+          const keys: (keyof UpgradeState)[] = ['swordDamage', 'archerDamage', 'spawnSpeed', 'minerSpeed'];
+          const pick = keys[Math.floor(Math.random() * keys.length)];
+          // Just cheat slightly and bump stats without cost for "Simulation" feel, or deduce gold
+          if (this.enemyGold > 300) {
+              this.enemyGold -= 300;
+              this.enemyUpgrades[pick]++;
+          }
+      }
   }
 
   update() {
     if (this.paused) return; 
     
-    // RESET SLOW FLAGS (Critical for Hazard Logic)
     this.units.forEach(u => u.isSlowed = false);
 
     if (this.victory && this.frame % 30 === 0) {
@@ -1510,25 +1489,30 @@ export class GameEngine {
     if (this.enemySkillCooldowns.FREEZE > 0) this.enemySkillCooldowns.FREEZE--;
 
     // Fog of War Calculation
-    let pMaxVis = PLAYER_BASE_X + FOG_OF_WAR_RANGE;
-    let eMinVis = ENEMY_BASE_X - FOG_OF_WAR_RANGE;
+    if (this.level.isSpectator) {
+        // SPECTATOR MODE: FULL MAP VISIBILITY
+        this.playerVisibleX = WORLD_WIDTH;
+        this.enemyVisibleX = 0;
+        
+        // Also run Player AI
+        this.updatePlayerAI();
+    } else {
+        let pMaxVis = PLAYER_BASE_X + FOG_OF_WAR_RANGE;
+        let eMinVis = ENEMY_BASE_X - FOG_OF_WAR_RANGE;
 
-    this.units.forEach(u => {
-        if (u.state === UnitState.DEAD) return;
-        if (u.faction === Faction.PLAYER) {
-            pMaxVis = Math.max(pMaxVis, u.x + FOG_OF_WAR_RANGE);
-        } else {
-            eMinVis = Math.min(eMinVis, u.x - FOG_OF_WAR_RANGE);
-        }
-    });
+        this.units.forEach(u => {
+            if (u.state === UnitState.DEAD) return;
+            if (u.faction === Faction.PLAYER) {
+                pMaxVis = Math.max(pMaxVis, u.x + FOG_OF_WAR_RANGE);
+            } else {
+                eMinVis = Math.min(eMinVis, u.x - FOG_OF_WAR_RANGE);
+            }
+        });
 
-    this.playerVisibleX = Math.min(pMaxVis, WORLD_WIDTH);
-    this.enemyVisibleX = Math.max(eMinVis, 0);
+        this.playerVisibleX = Math.min(pMaxVis, WORLD_WIDTH);
+        this.enemyVisibleX = Math.max(eMinVis, 0);
+    }
 
-    // INCOME LOGIC: Base 5 + (UpgradeLevel * 5)
-    // Level 0: 5G/s
-    // Level 1: 10G/s
-    // Level 5: 30G/s
     const passiveIncome = 5 + ((this.upgrades.passiveGold || 0) * 5); 
     if (this.frame % 60 === 0) {
         this.gold += passiveIncome;
@@ -1537,8 +1521,8 @@ export class GameEngine {
     this.manageVanguard(); 
     this.updateQueues();
     this.updateAI();
-    this.updateHazards(); // Hazards run first, setting isSlowed and dealing DoT
-    this.updateUnits();   // Units move, checking isSlowed
+    this.updateHazards(); 
+    this.updateUnits();   
     this.updateProjectiles();
     this.updateParticles();
     this.updateLightning();

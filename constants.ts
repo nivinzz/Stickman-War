@@ -147,6 +147,30 @@ export const getTheme = (level: number): LevelTheme => {
   return LEVEL_THEMES[(level - 1) % LEVEL_THEMES.length];
 };
 
+// BOT NAMES FOR ONLINE LOBBY
+export const BOT_NAMES = [
+    // Vietnamese Names
+    "Hùng Dragon", "Bé Na 2k5", "Tuấn Hưng", "Quang Hải Pro", "Linh Ka", 
+    "Sát Thủ Bóng Đêm", "Hắc Bạch Vô Thường", "Thánh Gióng", "Sơn Tùng MTP", "Ba Gà",
+    "Cô Giáo Thảo", "Chí Phèo", "Lão Hạc", "Cậu Vàng", "Đại Ca Lớp 5A",
+    "Nguyễn Văn A", "Trần Dần", "Khá Bảnh", "Huấn Hoa Hồng", "Tiến Bịp",
+    "Mèo Simmy", "Độ Mixi", "Bomman", "SofM", "Optimus", "Văn Toàn", "Công Phượng",
+    "Thầy Ba", "Zeros", "Stark", "Levi", "Dia1", "Artifact", "Palette",
+    "BigKoro", "Slay", "RonOP", "YiJin", "Warzone", "Naul",
+    
+    // English/Global Names
+    "ShadowSlayer", "NoobMaster69", "DragonBorn", "John Wick", "IronMan",
+    "CaptainVietnam", "Faker", "S1mple", "Ninja", "Shroud",
+    "xX_Sniper_Xx", "DarkKnight", "GodFather", "Terminator", "Rambo",
+    "Gandalf", "Voldemort", "Arthas", "Illidan", "Kratos",
+    "MasterChief", "DoomGuy", "Link", "Zelda", "Mario",
+    "Pikachu", "Naruto", "Sasuke", "Goku", "Vegeta",
+    "Geralt", "Yennefer", "Triss", "Ciri", "Vesemir",
+    "Luffy", "Zoro", "Sanji", "Nami", "Usopp", "Chopper",
+    "Tanjiro", "Nezuko", "Zenitsu", "Inosuke", "Rengoku",
+    "Saitama", "Genos", "Mob", "Reigen", "Dimple"
+];
+
 // Translations
 export const TRANS = {
   VN: {

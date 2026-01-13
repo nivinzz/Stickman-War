@@ -3,13 +3,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import GameCanvas from './components/GameCanvas';
 import ControlPanel from './components/ControlPanel';
 import UpgradeMenu from './components/UpgradeMenu';
+import OnlineLobby from './components/OnlineLobby'; // New Component
 import { GameEngine } from './services/GameEngine';
 import { soundManager } from './services/SoundManager';
-import { UnitType, UpgradeState, GameLevel, Faction, UnitState, SpawnQueueItem, Language } from './types';
+import { UnitType, UpgradeState, GameLevel, Faction, UnitState, SpawnQueueItem, Language, PlayerProfile } from './types';
 import { INITIAL_GOLD, TRANS, MAX_HEROES, LEVEL_THEMES, MAX_LEVEL, MAX_POPULATION, POP_UPGRADE_COST, MAX_POP_UPGRADES, PASSIVE_GOLD_UPGRADE_COST, MAX_PASSIVE_GOLD_LEVEL, MAX_TOWERS } from './constants';
 
 const App: React.FC = () => {
-  const [gameState, setGameState] = useState<'MENU' | 'LEVEL_SELECT' | 'PLAYING' | 'VICTORY' | 'DEFEAT'>('MENU');
+  const [gameState, setGameState] = useState<'MENU' | 'LEVEL_SELECT' | 'ONLINE_LOBBY' | 'PLAYING' | 'VICTORY' | 'DEFEAT'>('MENU');
   
   // --- ROBUST SAVE SYSTEM (LAZY INIT) ---
   const [maxReachedLevel, setMaxReachedLevel] = useState<number>(() => {
@@ -46,6 +47,13 @@ const App: React.FC = () => {
   const [engine, setEngine] = useState<GameEngine | null>(null);
   const [isMuted, setIsMuted] = useState(soundManager.isMuted());
   
+  const [isOnlineMatch, setIsOnlineMatch] = useState(false);
+  const [isSpectator, setIsSpectator] = useState(false);
+  const [opponentName, setOpponentName] = useState<string>('');
+  // New State for Online UI
+  const [opponentElo, setOpponentElo] = useState<number>(1000);
+  const [mapThemeIndex, setMapThemeIndex] = useState<number>(0);
+
   // React state mirrors for UI
   const [gold, setGold] = useState(INITIAL_GOLD);
   const [population, setPopulation] = useState(0);
@@ -74,15 +82,17 @@ const App: React.FC = () => {
 
   // MUSIC & AMBIENCE EFFECT
   useEffect(() => {
-    if (gameState === 'MENU' || gameState === 'LEVEL_SELECT') {
+    if (gameState === 'MENU' || gameState === 'LEVEL_SELECT' || gameState === 'ONLINE_LOBBY') {
         soundManager.playMenuMusic();
     } else if (gameState === 'PLAYING') {
-        const theme = LEVEL_THEMES[(level - 1) % LEVEL_THEMES.length];
+        // Use mapThemeIndex for online, or level logic for offline
+        const themeIdx = isOnlineMatch ? mapThemeIndex : ((level - 1) % LEVEL_THEMES.length);
+        const theme = LEVEL_THEMES[themeIdx];
         soundManager.playGameAmbience(theme.nameEn);
     } else {
         soundManager.stopAmbience();
     }
-  }, [gameState, level]);
+  }, [gameState, level, isOnlineMatch, mapThemeIndex]);
 
   const saveProgress = (newMaxLevel: number, currentUpgrades: UpgradeState, records: Record<number, number>) => {
       localStorage.setItem('stickman_max_level', newMaxLevel.toString());
@@ -97,6 +107,29 @@ const App: React.FC = () => {
           passiveGold: 0
       };
       localStorage.setItem('stickman_upgrades', JSON.stringify(storageUpgrades));
+  };
+
+  const updateLeaderboard = (win: boolean) => {
+      if (isSpectator) return; // Spectators don't affect rank
+      const savedLb = localStorage.getItem('stickman_leaderboard_v3');
+      const myName = localStorage.getItem('stickman_player_name') || 'You';
+      let lb: PlayerProfile[] = savedLb ? JSON.parse(savedLb) : [];
+      
+      let profile = lb.find(p => p.name === myName);
+      if (!profile) {
+          profile = { name: myName, wins: 0, matches: 0, elo: 1000 };
+          lb.push(profile);
+      }
+      
+      profile.matches++;
+      if (win) {
+          profile.wins++;
+          profile.elo += 25;
+      } else {
+          profile.elo = Math.max(0, profile.elo - 20); // Harder punishment
+      }
+      
+      localStorage.setItem('stickman_leaderboard_v3', JSON.stringify(lb));
   };
 
   const formatTime = (seconds: number) => {
@@ -116,7 +149,8 @@ const App: React.FC = () => {
           // Restart context dependent sound
           if (gameState === 'MENU' || gameState === 'LEVEL_SELECT') soundManager.playMenuMusic();
           else if (gameState === 'PLAYING') {
-              const theme = LEVEL_THEMES[(level - 1) % LEVEL_THEMES.length];
+              const themeIdx = isOnlineMatch ? mapThemeIndex : ((level - 1) % LEVEL_THEMES.length);
+              const theme = LEVEL_THEMES[themeIdx];
               soundManager.playGameAmbience(theme.nameEn);
           }
       }
@@ -162,48 +196,82 @@ const App: React.FC = () => {
       if (eng.victory) {
           setGameState('VICTORY');
           soundManager.stopAmbience();
-          let newRecords = { ...levelRecords };
-          if (!newRecords[level] || currentSeconds < newRecords[level]) {
-              newRecords[level] = currentSeconds;
-              setLevelRecords(newRecords);
-          }
-          if (level >= maxReachedLevel) {
-              const next = Math.min(MAX_LEVEL, level + 1);
-              setMaxReachedLevel(next);
-              saveProgress(next, eng.upgrades, newRecords);
+          if (isOnlineMatch) {
+              updateLeaderboard(true);
           } else {
-              localStorage.setItem('stickman_level_records', JSON.stringify(newRecords));
-              saveUpgradesOnly(eng.upgrades);
+              let newRecords = { ...levelRecords };
+              if (!newRecords[level] || currentSeconds < newRecords[level]) {
+                  newRecords[level] = currentSeconds;
+                  setLevelRecords(newRecords);
+              }
+              if (level >= maxReachedLevel) {
+                  const next = Math.min(MAX_LEVEL, level + 1);
+                  setMaxReachedLevel(next);
+                  saveProgress(next, eng.upgrades, newRecords);
+              } else {
+                  localStorage.setItem('stickman_level_records', JSON.stringify(newRecords));
+                  saveUpgradesOnly(eng.upgrades);
+              }
           }
       }
       if (eng.gameOver) {
           setGameState('DEFEAT');
           soundManager.stopAmbience();
+          if (isOnlineMatch) {
+              updateLeaderboard(false);
+          }
       }
   };
 
-  const startGame = (lvl: number) => {
+  // UPDATED START GAME FUNCTION
+  const startGame = (lvl: number, isMultiplayer: boolean = false, oppName: string = '', oppElo: number = 1000, mapId: number = 0, isSpec: boolean = false) => {
     setPaused(false);
     setGameStarted(false); 
     setGameState('PLAYING');
     setTimeElapsed(0);
+    setIsOnlineMatch(isMultiplayer);
+    setIsSpectator(isSpec);
+    setOpponentName(oppName);
+    setOpponentElo(oppElo);
     
+    // For Campaign, mapId is derived from level. For Online, it's passed.
+    const finalMapId = isMultiplayer ? mapId : ((lvl - 1) % LEVEL_THEMES.length);
+    setMapThemeIndex(finalMapId);
+    
+    // Create Level Config
     const isBoss = lvl % 10 === 0;
     const gameLevel: GameLevel = {
-      level: lvl,
+      level: isMultiplayer ? (finalMapId * 5) + 1 : lvl, // Hack to trick getTheme if used elsewhere, but mainly for engine
       enemySpawnRate: Math.max(30, 200 - (lvl * 10)), 
       enemyStatMultiplier: 1 + (lvl * 0.15),
       enemySmartAI: lvl > 3,
       enemyGoldDrip: lvl * 2,
-      isBoss
+      isBoss,
+      isMultiplayer,
+      isSpectator: isSpec,
+      opponentName: oppName,
+      opponentElo: oppElo,
+      mapThemeIndex: finalMapId
     };
 
-    const sessionUpgrades: UpgradeState = {
-        ...upgrades,
-        maxPopUpgrade: 0,
-        passiveGold: 0
-    };
-    setUpgrades(sessionUpgrades);
+    // If Online, RESET upgrades for the session (Fair Play)
+    // If Offline, use current upgrades
+    let sessionUpgrades: UpgradeState;
+    if (isMultiplayer) {
+         sessionUpgrades = { 
+            baseHp: 0, swordDamage: 0, archerDamage: 0, cavalryDamage: 0, spawnSpeed: 0,
+            arrowRainPower: 0, lightningPower: 0, freezePower: 0, heroPower: 0,
+            minerSpeed: 0, maxPopUpgrade: 0, passiveGold: 0, towerPower: 0
+        };
+    } else {
+        sessionUpgrades = {
+            ...upgrades,
+            maxPopUpgrade: 0,
+            passiveGold: 0
+        };
+    }
+    
+    if (!isMultiplayer) setUpgrades(sessionUpgrades);
 
     const newEngine = new GameEngine(gameLevel, sessionUpgrades, syncState);
     newEngine.gold = INITIAL_GOLD; 
@@ -223,65 +291,88 @@ const App: React.FC = () => {
   };
 
   const handleBuyUnit = (type: UnitType) => {
+    if (isSpectator) return;
     if (engine) engine.queueUnit(type, Faction.PLAYER);
   };
 
   const handleDismissUnit = (type: UnitType) => {
+      if (isSpectator) return;
       if (engine) engine.dismissUnit(type);
   };
 
   const handleUpgrade = (type: keyof UpgradeState, cost: number) => {
+    if (isSpectator) return;
     if (engine && engine.gold >= cost) {
       engine.gold -= cost;
-      setUpgrades(prev => {
-          const next = { ...prev, [type]: prev[type] + 1 };
-          if (engine) engine.upgrades = next; 
-          
-          if (type === 'baseHp' && engine) {
+      // In online mode, we modify engine upgrades directly but don't persist to global state
+      if (engine.level.isMultiplayer) {
+           const next = { ...engine.upgrades, [type]: engine.upgrades[type] + 1 };
+           engine.upgrades = next;
+           if (type === 'baseHp') {
               const oldMax = engine.playerMaxBaseHp;
               engine.playerMaxBaseHp = 2000 * (1 + (next.baseHp * 0.1));
               engine.playerBaseHp += (engine.playerMaxBaseHp - oldMax);
-          }
-          
-          saveUpgradesOnly(next);
-          return next;
-      });
+           }
+      } else {
+          // Offline mode - update React state and persist
+          setUpgrades(prev => {
+              const next = { ...prev, [type]: prev[type] + 1 };
+              if (engine) engine.upgrades = next; 
+              
+              if (type === 'baseHp' && engine) {
+                  const oldMax = engine.playerMaxBaseHp;
+                  engine.playerMaxBaseHp = 2000 * (1 + (next.baseHp * 0.1));
+                  engine.playerBaseHp += (engine.playerMaxBaseHp - oldMax);
+              }
+              
+              saveUpgradesOnly(next);
+              return next;
+          });
+      }
       if (engine) syncState(engine);
     }
   };
 
   const handleBuyPopUpgrade = () => {
+      if (isSpectator) return;
       if (engine && engine.gold >= POP_UPGRADE_COST && upgrades.maxPopUpgrade < MAX_POP_UPGRADES) {
           engine.gold -= POP_UPGRADE_COST;
-          setUpgrades(prev => {
-             const next = { ...prev, maxPopUpgrade: prev.maxPopUpgrade + 1 };
-             engine.upgrades = next;
-             return next;
-          });
+          // Local engine update only if online
+          const nextVal = engine.upgrades.maxPopUpgrade + 1;
+          const nextUpgrades = { ...engine.upgrades, maxPopUpgrade: nextVal };
+          engine.upgrades = nextUpgrades;
+          
+          if (!isOnlineMatch) {
+             setUpgrades(nextUpgrades); // Update visual state for offline persistence logic
+          }
           syncState(engine);
       }
   };
 
   const handleBuyPassiveGoldUpgrade = () => {
-      if (engine && engine.gold >= PASSIVE_GOLD_UPGRADE_COST && (upgrades.passiveGold || 0) < MAX_PASSIVE_GOLD_LEVEL) { 
+      if (isSpectator) return;
+      if (engine && engine.gold >= PASSIVE_GOLD_UPGRADE_COST && (engine.upgrades.passiveGold || 0) < MAX_PASSIVE_GOLD_LEVEL) { 
           engine.gold -= PASSIVE_GOLD_UPGRADE_COST;
-          setUpgrades(prev => {
-              const next = { ...prev, passiveGold: (prev.passiveGold || 0) + 1 };
-              engine.upgrades = next;
-              return next;
-          });
+           const nextVal = (engine.upgrades.passiveGold || 0) + 1;
+           const nextUpgrades = { ...engine.upgrades, passiveGold: nextVal };
+           engine.upgrades = nextUpgrades;
+           
+           if (!isOnlineMatch) {
+               setUpgrades(nextUpgrades);
+           }
           syncState(engine);
       }
   };
   
   const handleBuyTower = () => {
+      if (isSpectator) return;
       if (engine) {
           engine.buyTower(Faction.PLAYER);
       }
   };
 
   const handleSetStrategy = (strategy: 'CHARGE' | 'DEFEND' | 'PATROL' | 'VANGUARD') => {
-      if (!engine) return;
+      if (isSpectator || !engine) return;
       if (strategy === 'CHARGE') {
           engine.clearRallyPoint();
           setActiveSkill(null); 
@@ -299,13 +390,17 @@ const App: React.FC = () => {
   };
   
   const handleSetVanguardPct = (pct: number) => {
-      if(engine) {
-          engine.setVanguardPercentage(pct);
-          setVanguardPercentage(pct);
-      }
+      if (isSpectator || !engine) return;
+      engine.setVanguardPercentage(pct);
+      setVanguardPercentage(pct);
   };
 
   const handleNextLevel = () => {
+    if (isOnlineMatch) {
+        setGameState('ONLINE_LOBBY');
+        setEngine(null);
+        return;
+    }
     const nextLvl = level + 1;
     if (nextLvl <= MAX_LEVEL) {
         if (engine) {
@@ -318,7 +413,8 @@ const App: React.FC = () => {
   };
 
   const handleRestart = () => {
-    startGame(level); 
+    // Restart with same config
+    startGame(level, isOnlineMatch, opponentName, opponentElo, mapThemeIndex, isSpectator); 
   };
 
   const handleStartMatch = () => {
@@ -331,12 +427,12 @@ const App: React.FC = () => {
 
   const handleBackToMenu = () => {
       setEngine(null);
-      setGameState('LEVEL_SELECT');
+      if (isOnlineMatch) setGameState('ONLINE_LOBBY');
+      else setGameState('LEVEL_SELECT');
   };
 
   const handleSkillUsed = () => {
       // Only clear selection for instant-cast skills.
-      // For Flag placement (Rally/Patrol), keep the mode active so user can click ground repeatedly.
       if (activeSkill && ['ARROW_RAIN', 'LIGHTNING', 'FREEZE'].includes(activeSkill)) {
           setActiveSkill(null);
       }
@@ -370,19 +466,35 @@ const App: React.FC = () => {
             STICKMAN WAR
             <span className="block text-2xl text-slate-400 font-normal mt-2">
                 Mountain Defense 
-                <span className="text-sm text-slate-500 bg-slate-800 px-2 py-1 rounded-full ml-2 align-middle">v1.2</span>
+                <span className="text-sm text-slate-500 bg-slate-800 px-2 py-1 rounded-full ml-2 align-middle">v1.4 Online Sim</span>
             </span>
           </h1>
-          <button 
-            onClick={() => setGameState('LEVEL_SELECT')}
-            className="px-8 py-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-2xl shadow-lg transform transition hover:scale-105"
-          >
-            {t.start}
-          </button>
+          <div className="flex flex-col gap-4">
+            <button 
+                onClick={() => setGameState('LEVEL_SELECT')}
+                className="px-8 py-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-2xl shadow-lg transform transition hover:scale-105"
+            >
+                {t.start}
+            </button>
+            <button 
+                onClick={() => setGameState('ONLINE_LOBBY')}
+                className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xl shadow-lg transform transition hover:scale-105"
+            >
+                🌐 CHƠI ONLINE (PvP)
+            </button>
+          </div>
           <div className="text-slate-500 mt-8">
             <p>{t.tip}</p>
           </div>
         </div>
+      )}
+      
+      {gameState === 'ONLINE_LOBBY' && (
+          <OnlineLobby 
+            lang={lang}
+            onBack={() => setGameState('MENU')}
+            onStartMatch={(oppName, oppElo, mapId, isSpec) => startGame(30, true, oppName, oppElo, mapId, isSpec)} 
+          />
       )}
 
       {gameState === 'LEVEL_SELECT' && (
@@ -448,24 +560,62 @@ const App: React.FC = () => {
 
       {gameState === 'PLAYING' && engine && (
         <>
-          <div className="w-full max-w-[85vw] flex justify-between items-center mb-1 px-2 md:px-4">
-             <div className="flex items-center gap-2 md:gap-4">
-                <div className="text-lg md:text-xl font-bold text-yellow-400 flex items-center gap-2">
+          <div className="w-full max-w-[95vw] flex justify-between items-center mb-1 px-2 md:px-4">
+             <div className="flex items-center gap-2 md:gap-4 flex-1">
+                {/* Gold Display */}
+                <div className="text-lg md:text-xl font-bold text-yellow-400 flex items-center gap-2 w-24">
                     <span className="text-xl md:text-2xl">🪙</span> {gold}
                 </div>
-                <div className="bg-slate-800 px-3 py-1 rounded text-xs md:text-sm text-slate-300 flex items-center gap-2">
-                    <span>{level % 10 === 0 ? <span className="text-red-400 font-bold">{t.bossLevel} {level}</span> : `Level ${level}`}</span>
-                    <span className={`font-mono font-bold ${timeElapsed > 900 ? 'text-red-500 animate-pulse' : 'text-slate-300'}`}>
-                        ⏱️ {formatTime(timeElapsed)}
-                    </span>
+
+                {/* --- ONLINE MATCH INFO (CENTER) --- */}
+                {isOnlineMatch ? (
+                    <div className="flex-1 flex justify-center items-center">
+                        <div className="bg-slate-800/90 border border-slate-600 px-6 py-2 rounded-lg flex items-center gap-4 shadow-lg backdrop-blur-sm">
+                            {/* Player Left */}
+                            <div className="flex flex-col items-end">
+                                <span className={`font-bold text-sm ${isSpectator ? 'text-blue-400' : 'text-green-400'}`}>
+                                    {isSpectator ? opponentName.split(' vs ')[0] : 'YOU'}
+                                </span>
+                                <span className="text-[10px] text-yellow-500 font-mono">
+                                    Elo: ???
+                                </span>
+                            </div>
+
+                            {/* VS Badge */}
+                            <div className="bg-red-600 text-white font-black text-xs px-2 py-1 rounded skew-x-[-10deg]">
+                                VS
+                            </div>
+
+                            {/* Player Right */}
+                            <div className="flex flex-col items-start">
+                                <span className="font-bold text-sm text-red-400">
+                                    {isSpectator ? opponentName.split(' vs ')[1] : opponentName}
+                                </span>
+                                <span className="text-[10px] text-yellow-500 font-mono">
+                                    Elo: {isSpectator ? opponentElo : opponentElo}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    // Offline Info
+                    <div className="bg-slate-800 px-3 py-1 rounded text-xs md:text-sm text-slate-300 flex items-center gap-2">
+                        <span>{level % 10 === 0 ? <span className="text-red-400 font-bold">{t.bossLevel} {level}</span> : `Level ${level}`}</span>
+                    </div>
+                )}
+
+                {/* Timer */}
+                <div className={`font-mono font-bold w-16 text-right ${timeElapsed > 900 ? 'text-red-500 animate-pulse' : 'text-slate-300'}`}>
+                    ⏱️ {formatTime(timeElapsed)}
                 </div>
              </div>
+
              <div className="flex gap-2">
                  <button onClick={handleTogglePause} className="px-3 py-1 bg-slate-700 rounded text-xs hover:bg-slate-600">
                      {paused && gameStarted ? t.resume : t.paused}
                  </button>
                  <button onClick={handleBackToMenu} className="px-3 py-1 bg-slate-800 rounded text-xs hover:bg-red-900 text-slate-400">
-                     {t.menu}
+                     {isOnlineMatch ? t.exit : t.menu}
                  </button>
              </div>
           </div>
@@ -476,23 +626,32 @@ const App: React.FC = () => {
                 targetingSkill={activeSkill}
                 onSkillUsed={handleSkillUsed}
             />
-            {/* Pass maxReachedLevel for Gating */}
-            <UpgradeMenu 
-                upgrades={upgrades} 
-                gold={gold} 
-                onUpgrade={handleUpgrade} 
-                lang={lang} 
-                maxReachedLevel={maxReachedLevel} 
-            />
+            {/* Hide Upgrade Menu in Spectator Mode */}
+            {!isSpectator && (
+                <UpgradeMenu 
+                    upgrades={isOnlineMatch ? engine.upgrades : upgrades} 
+                    gold={gold} 
+                    onUpgrade={handleUpgrade} 
+                    lang={lang} 
+                    maxReachedLevel={isOnlineMatch ? 60 : maxReachedLevel} 
+                />
+            )}
             
             {/* Start / Pause Overlay */}
             {(!gameStarted || paused) && (
                 <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-40 backdrop-blur-sm">
                     {!gameStarted ? (
                         <div className="text-center animate-bounce">
-                            <h2 className="text-4xl font-black text-white mb-4">{t.ready}</h2>
+                            <h2 className="text-4xl font-black text-white mb-4">
+                                {isSpectator ? 'WATCH MATCH' : (isOnlineMatch ? 'PVP MATCH' : t.ready)}
+                            </h2>
+                             {isOnlineMatch && (
+                                <div className="text-xl text-blue-400 font-bold mb-4">
+                                    {isSpectator ? opponentName : `YOU vs ${opponentName}`}
+                                </div>
+                             )}
                             <button onClick={handleStartMatch} className="px-8 py-4 bg-green-600 hover:bg-green-500 rounded-lg text-2xl font-bold shadow-lg text-white">
-                                {t.go}
+                                {isSpectator ? 'Start Watching' : t.go}
                             </button>
                         </div>
                     ) : (
@@ -507,7 +666,8 @@ const App: React.FC = () => {
             )}
           </div>
 
-          <div className="w-full max-w-[85vw] flex flex-col items-center">
+          {/* HIDE CONTROLS IN SPECTATOR MODE, BUT SHOW STATS */}
+          <div className={`w-full max-w-[85vw] flex flex-col items-center ${isSpectator ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
              <ControlPanel 
                 gold={gold} 
                 population={population}
@@ -527,7 +687,7 @@ const App: React.FC = () => {
                 onBuyPassiveGoldUpgrade={handleBuyPassiveGoldUpgrade}
                 onBuyTower={handleBuyTower}
                 towerCount={towerCount}
-                passiveGoldLevel={upgrades.passiveGold || 0}
+                passiveGoldLevel={isOnlineMatch ? engine.upgrades.passiveGold : (upgrades.passiveGold || 0)}
                 rallyPointSet={rallyPointSet}
                 patrolPointSet={patrolPointSet} 
                 cooldowns={cooldowns}
@@ -543,17 +703,17 @@ const App: React.FC = () => {
         <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50">
           <div className="bg-slate-800 p-8 rounded-2xl border-2 border-slate-600 text-center max-w-md shadow-2xl animate-fade-in relative overflow-hidden">
              <h2 className={`text-5xl font-black mb-4 ${gameState === 'VICTORY' ? 'text-green-500' : 'text-red-500'}`}>
-                {gameState === 'VICTORY' ? t.victory : t.defeat}
+                {isSpectator ? 'GAME OVER' : (gameState === 'VICTORY' ? t.victory : t.defeat)}
              </h2>
              {gameState === 'VICTORY' && (
                  <div className="text-yellow-400 font-mono text-xl mb-2">
-                     {t.victoryDesc} <br/>
+                     {isSpectator ? 'Blue Team Wins!' : t.victoryDesc} <br/>
                      ⏱️ {formatTime(timeElapsed)}
                  </div>
              )}
              <p className="text-slate-300 mb-8">
-                {gameState === 'DEFEAT' ? t.defeatDesc : ''}
-                {gameState === 'VICTORY' && level === MAX_LEVEL && (
+                {gameState === 'DEFEAT' ? (isSpectator ? 'Red Team Wins!' : t.defeatDesc) : ''}
+                {gameState === 'VICTORY' && level === MAX_LEVEL && !isOnlineMatch && (
                     <div className="mt-4 text-yellow-400 font-bold text-xl animate-pulse">
                         {t.finalWin}
                     </div>
@@ -561,7 +721,7 @@ const App: React.FC = () => {
              </p>
              
              <div className="flex gap-4 justify-center flex-wrap">
-                {gameState === 'VICTORY' && level < MAX_LEVEL ? (
+                {gameState === 'VICTORY' && level < MAX_LEVEL && !isOnlineMatch ? (
                      <button 
                         onClick={handleNextLevel}
                         className="px-6 py-3 bg-green-600 hover:bg-green-500 rounded-lg font-bold shadow-lg text-white"
@@ -573,14 +733,18 @@ const App: React.FC = () => {
                         onClick={handleRestart}
                         className="px-6 py-3 bg-red-600 hover:bg-red-500 rounded-lg font-bold shadow-lg text-white"
                     >
-                        {t.restart}
+                        {isOnlineMatch ? (isSpectator ? 'Replay' : 'Đấu Lại') : t.restart}
                      </button>
                 )}
                 <button 
-                    onClick={() => setGameState('LEVEL_SELECT')}
+                    onClick={() => {
+                        setEngine(null);
+                        if (isOnlineMatch) setGameState('ONLINE_LOBBY');
+                        else setGameState('LEVEL_SELECT');
+                    }}
                     className="px-6 py-3 border border-slate-500 text-slate-400 hover:text-white rounded-lg font-bold"
                 >
-                    {t.menu}
+                    {isOnlineMatch ? 'Về Sảnh' : t.menu}
                 </button>
              </div>
           </div>
