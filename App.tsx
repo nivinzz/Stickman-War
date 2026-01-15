@@ -297,7 +297,7 @@ const App: React.FC = () => {
              <h2 className={`text-5xl font-black mb-4 ${gameState === 'VICTORY' ? 'text-green-500' : 'text-red-500'}`}>{gameState === 'VICTORY' ? TRANS[lang].victory : TRANS[lang].defeat}</h2>
              {matchResult && (
                  <div className="text-xl mb-4">
-                     Elo: {matchResult.oldElo} -> {matchResult.newElo} ({matchResult.eloChange > 0 ? '+' : ''}{matchResult.eloChange})
+                     Elo: {matchResult.oldElo} &rarr; {matchResult.newElo} ({matchResult.eloChange > 0 ? '+' : ''}{matchResult.eloChange})
                  </div>
              )}
              <button onClick={handleBackToMenu} className="px-6 py-3 border border-slate-500 text-white hover:bg-slate-700 rounded-lg font-bold">{TRANS[lang].backMenu}</button>

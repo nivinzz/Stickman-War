@@ -261,7 +261,7 @@ export const ROOM_NAMES_EN = ["1v1 Chill", "Practice", "Testing Builds", "Fight 
 export const TRANS = {
   VN: {
     // Menu
-    campaign: "CHIẾN DỊCH",
+    campaign: "CHƠI OFFLINE", // Changed from "CHIẾN DỊCH"
     onlinePvP: "ĐẤU ONLINE",
     
     // Online Lobby
@@ -340,7 +340,7 @@ export const TRANS = {
   },
   EN: {
     // Menu
-    campaign: "CAMPAIGN",
+    campaign: "PLAY OFFLINE", // Changed from "CAMPAIGN"
     onlinePvP: "ONLINE PVP",
 
     // Online Lobby
