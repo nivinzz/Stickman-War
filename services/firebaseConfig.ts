@@ -7,8 +7,6 @@ import { getAuth, GoogleAuthProvider } from "firebase/auth";
 const firebaseConfig = {
   apiKey: "AIzaSyC9dOf8-6FPRF51yAqCHNgsabf1-_UZdSU",
   authDomain: "interior-hub2025.firebaseapp.com",
-  // CRITICAL FIX: Added databaseURL so the app can find your data
-  databaseURL: "https://interior-hub2025-default-rtdb.firebaseio.com",
   projectId: "interior-hub2025",
   storageBucket: "interior-hub2025.firebasestorage.app",
   messagingSenderId: "144174899730",
