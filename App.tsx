@@ -163,8 +163,9 @@ const App: React.FC = () => {
           profile = { 
               name: myName, 
               rankedStats: { wins: 0, losses: 0, elo: 100, streak: 0 },
-              casualStats: { wins: 0, losses: 0 },
-              rankTier: RankTier.BRONZE 
+              casualStats: { wins: 0, losses: 0, streak: 0 },
+              rankTier: RankTier.BRONZE,
+              status: 'IDLE' 
           };
           lb.push(profile);
       }
@@ -206,8 +207,13 @@ const App: React.FC = () => {
 
       } else {
           // CASUAL LOGIC
-          if (win) profile.casualStats.wins++;
-          else profile.casualStats.losses++;
+          if (win) {
+              profile.casualStats.wins++;
+              profile.casualStats.streak = (profile.casualStats.streak || 0) + 1;
+          } else {
+              profile.casualStats.losses++;
+              profile.casualStats.streak = 0;
+          }
           setMatchResult(null); // No Elo display for casual
       }
       
@@ -554,8 +560,9 @@ const App: React.FC = () => {
                   elo: opponentElo,
                   streak: Math.floor(Math.random() * 3)
               },
-              casualStats: { wins: 10, losses: 10 },
-              rankTier: oppTier
+              casualStats: { wins: 10, losses: 10, streak: 0 },
+              rankTier: oppTier,
+              status: 'IDLE'
           };
           setViewingProfile(mockProfile);
       }

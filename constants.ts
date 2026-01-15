@@ -175,8 +175,8 @@ export const getTheme = (level: number): LevelTheme => {
 };
 
 // INTERNATIONAL BOT NAMES
-const NAMES_VN = ["Hùng Dragon", "Bé Na 2k5", "Tuấn Hưng", "Quang Hải", "Sát Thủ Bóng Đêm", "Hắc Bạch", "Thánh Gióng", "Sơn Tùng", "Ba Gà", "Cô Giáo Thảo", "Chí Phèo", "Lão Hạc", "Cậu Vàng", "Văn A", "Trần Dần", "Khá Bảnh", "Tiến Bịp"];
-const NAMES_EN = ["ShadowSlayer", "DragonBorn", "NoobMaster69", "ProGamer", "SniperWolf", "IronFist", "DarkKnight", "StormBreaker", "GhostRider", "Viper", "Zeus", "Thor", "Loki", "Kratos", "Maverick", "Iceman", "Goose"];
+export const NAMES_VN = ["Hùng Dragon", "Bé Na 2k5", "Tuấn Hưng", "Quang Hải", "Sát Thủ Bóng Đêm", "Hắc Bạch", "Thánh Gióng", "Sơn Tùng", "Ba Gà", "Cô Giáo Thảo", "Chí Phèo", "Lão Hạc", "Cậu Vàng", "Văn A", "Trần Dần", "Khá Bảnh", "Tiến Bịp", "Hoàng Tử Gió", "Đạt Villa", "Lộc Fuho", "Thông Soái Ca", "Bà Tân Vlog", "Huấn Hoa Hồng", "Anh Da Đen", "Chị Google", "Mèo Simmy"];
+export const NAMES_EN = ["ShadowSlayer", "DragonBorn", "NoobMaster69", "ProGamer", "SniperWolf", "IronFist", "DarkKnight", "StormBreaker", "GhostRider", "Viper", "Zeus", "Thor", "Loki", "Kratos", "Maverick", "Iceman", "Goose", "Ninja", "Shroud", "PewDiePie", "MrBeast", "Dream", "Technoblade", "TommyInnit", "xQc", "Pokimane", "Valkyrae"];
 const NAMES_KR = ["Faker", "ShowMaker", "Chovy", "Deft", "Ruler", "Peanut", "Canyon", "Gumayusi", "Keria", "ZeusKR", "Oner", "BeryL", "Pyosik", "Zeka", "Kingen", "Aiming", "Lehends"];
 const NAMES_JP = ["Naruto", "Sasuke", "Goku", "Luffy", "Zoro", "Sanji", "Nami", "Robin", "Chopper", "Usopp", "Franky", "Brook", "Jinbe", "Tanjiro", "Nezuko", "Zenitsu", "Inosuke"];
 const NAMES_CN = ["Uzi", "TheShy", "Rookie", "Doinb", "Tian", "JackeyLove", "Ming", "Xiaohu", "Wei", "Gala", "Crisp", "Meiko", "Scout", "ViperCN", "Flandre", "Jiejie", "Knight"];
@@ -200,6 +200,55 @@ export const generateBotNames = (count: number): string[] => {
     }
     return Array.from(names);
 };
+
+// CHAT MESSAGES - SPLIT BY TYPE (SHORT, MEDIUM, LONG)
+// Ensure min length 5, max 120.
+
+// SHORT (Common - 90%)
+export const CHAT_VN_SHORT = [
+    "Lô anh em", "Chào cả nhà", "Solo ko nào?", "Lag quá mạng", "Hic hic", "Mạng chán ghê", "Game hay quá", "Ai kb đi nào", "Buồn quá đi", "Tìm trận lâu thế",
+    "Có ai onl ko?", "Kết bạn nhé", "Ai đánh ko?", "Leo rank ko?", "Mệt mỏi quá", "Vui vẻ thôi", "Xin chào nhé", "Hello ae", "Giao lưu ko?", "Test tướng tý"
+];
+
+export const CHAT_EN_SHORT = [
+    "Hello guys", "Anyone 1v1?", "So much lag", "Good game", "Noob team", "Anyone here?", "Ranked match?", "Boring now", "Fast match pls",
+    "Lets play", "Add me pls", "GG well played", "Nice game", "Lag is real", "Who wants to play", "Test build", "Hi everyone", "Im new here", "Lets goooo"
+];
+
+// MEDIUM (Occasional - 9%)
+export const CHAT_VN_MEDIUM = [
+    "Có ai biết cách qua màn 20 không?", "Leo rank mệt mỏi thực sự.", "Rank Vàng ở đây gà thế nhỉ?", "Cần tìm sư phụ dạy chơi.", "Map mùa đông khó thủ quá.", 
+    "Lên đồ gì cho Tướng ngon nhất?", "Mãi mới được 1 trận thắng.", "Hôm nay xui quá thua liên tục.", "Ai có bang hội cho xin slot.", "Cày tiền mua lính lâu quá."
+];
+
+export const CHAT_EN_MEDIUM = [
+    "Anyone want to practice 1v1?", "No toxic players please.", "How to beat level 40?", "Looking for a guild.", "Just hit Challenger rank!", 
+    "Nerf cavalry please.", "My internet is so bad today.", "Finally won a match.", "Best strategy for desert map?", "Need gold farming tips."
+];
+
+// LONG (Rare - 1%) - Capped at 120 chars
+export const CHAT_VN_LONG = [
+    "Nãy đang thắng thế thì mẹ gọi đi ăn cơm, bỏ máy thế là thua ngược cay vãi chưởng anh em ạ.", 
+    "Game này công nhận hay, mà cày tiền hơi lâu. Admin xem xét tăng vàng màn boss lên xíu được không?",
+    "Thề luôn, gặp ông nào cầm full Kỵ binh sợ thật, nó ủi một phát bay hết cả hàng thủ. Ai chỉ cách khắc chế với?",
+    "Hôm nay đen thật sự, đánh 10 trận thua 8, từ Kim Cương rớt xuống Bạch Kim luôn rồi. Ai gánh tôi với?",
+    "Anh em cho hỏi cái nâng cấp tháp canh có tác dụng nhiều không? Thấy bắn cũng yếu mà tốn vàng quá."
+];
+
+export const CHAT_EN_LONG = [
+    "I swear the RNG in this game hates me. I had a 10 win streak and now I'm back to Bronze. Help me.", 
+    "Just discovered a strat with mass miners and one hero, works pretty well on the desert map early game.",
+    "Why does the enemy AI always seem to have more gold than me? Is it cheating or am I just bad at economy?",
+    "Can someone explain how the rank system works exactly? I won a game but got +0 Elo, is that a bug?",
+    "GG well played to the guy I just fought, that was the most intense match I've had in weeks!"
+];
+
+// Combine for backward compatibility if needed, though we use splits now
+export const CHAT_VN = [...CHAT_VN_SHORT, ...CHAT_VN_MEDIUM, ...CHAT_VN_LONG];
+export const CHAT_EN = [...CHAT_EN_SHORT, ...CHAT_EN_MEDIUM, ...CHAT_EN_LONG];
+
+export const ROOM_NAMES_VN = ["Giao lưu vui vẻ", "Tập luyện", "Thử nghiệm đội hình", "Vào là chiến", "Solo Yasuo", "Không chơi bẩn", "Tuyển bạn gái", "Phòng của Pro", "Newbie tập chơi", "Test tướng"];
+export const ROOM_NAMES_EN = ["1v1 Chill", "Practice", "Testing Builds", "Fight Club", "Noobs Only", "Pros Only", "Join Fast", "Friendly Match", "Casual Game", "Test Hero"];
 
 
 // Translations

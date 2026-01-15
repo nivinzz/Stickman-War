@@ -216,20 +216,35 @@ export interface PlayerProfile {
         streak: number; // Winning streak for bonus points
     };
     // Casual/Friendly Stats
-    casualStats: PlayerStats;
+    casualStats: PlayerStats & {
+        streak: number; // Winning streak for casual
+    };
     
     rankTier: RankTier;
-    status?: 'IDLE' | 'WAITING' | 'PLAYING'; 
+    status: 'IDLE' | 'WAITING' | 'PLAYING' | 'OFFLINE'; 
 }
 
-export interface GameRoom {
+// --- NEW SOCIAL TYPES ---
+export interface ChatMessage {
+    id: string;
+    sender: string;
+    text: string;
+    rank: RankTier;
+    timestamp: number;
+    isSystem?: boolean;
+    topRank?: number; // Added to store leaderboard position (e.g., 1 for Top 1)
+}
+
+export interface LobbyRoom {
     id: string;
     name: string;
     host: string;
+    status: 'WAITING' | 'PLAYING';
+    players: number; // 1/2 or 2/2
+    mapIndex: number;
     hostElo: number;
-    guest?: string;
-    guestElo?: number;
-    mapThemeIndex: number; // 0-11
+    guestName?: string; // New: Opponent name
+    guestElo?: number;  // New: Opponent Elo
 }
 
 export type Language = 'VN' | 'EN';
