@@ -187,12 +187,8 @@ const ALL_NAMES = [NAMES_VN, NAMES_EN, NAMES_KR, NAMES_JP, NAMES_CN, NAMES_DE, N
 
 export const generateBotNames = (count: number): string[] => {
     const names = new Set<string>();
-    
-    // Add fixed famous names first
     [...NAMES_VN, ...NAMES_EN].forEach(n => names.add(n));
-
     while(names.size < count) {
-        // Pick a random language pool
         const pool = ALL_NAMES[Math.floor(Math.random() * ALL_NAMES.length)];
         const base = pool[Math.floor(Math.random() * pool.length)];
         const suffix = Math.floor(Math.random() * 999);
@@ -201,57 +197,88 @@ export const generateBotNames = (count: number): string[] => {
     return Array.from(names);
 };
 
-// AVATAR GENERATOR (DiceBear Adventurer)
+// AVATAR GENERATOR
 export const getAvatarUrl = (seed: string): string => {
-    // Uses the 'adventurer' collection which fits the RPG/Stickman theme
     return `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(seed)}`;
 };
 
-// CHAT MESSAGES - SPLIT BY TYPE (SHORT, MEDIUM, LONG)
-// Ensure min length 5, max 120.
+// --- ADVANCED CHAT SYSTEM ---
 
-// SHORT (Common - 90%)
-export const CHAT_VN_SHORT = [
-    "Lô anh em", "Chào cả nhà", "Solo ko nào?", "Lag quá mạng", "Hic hic", "Mạng chán ghê", "Game hay quá", "Ai kb đi nào", "Buồn quá đi", "Tìm trận lâu thế",
-    "Có ai onl ko?", "Kết bạn nhé", "Ai đánh ko?", "Leo rank ko?", "Mệt mỏi quá", "Vui vẻ thôi", "Xin chào nhé", "Hello ae", "Giao lưu ko?", "Test tướng tý"
-];
+// 1. Conversation Topics
+export const CHAT_TOPICS = {
+    GREETING: ["hello", "hi", "chào", "lô", "hey", "yo"],
+    BRAG: ["ez", "easy", "gà", "noob", "thắng", "win", "rank", "top", "vip"],
+    COMPLAIN: ["lag", "hack", "bug", "đen", "thua", "khó", "chán", "xui"],
+    STRATEGY: ["tướng", "lính", "đồ", "build", "map", "cách chơi", "tháp", "tower"],
+    INVITE: ["solo", "kb", "kết bạn", "phòng", "room", "vs", "đánh"],
+};
 
-export const CHAT_EN_SHORT = [
-    "Hello guys", "Anyone 1v1?", "So much lag", "Good game", "Noob team", "Anyone here?", "Ranked match?", "Boring now", "Fast match pls",
-    "Lets play", "Add me pls", "GG well played", "Nice game", "Lag is real", "Who wants to play", "Test build", "Hi everyone", "Im new here", "Lets goooo"
-];
+// 2. Chat Templates (Massive Variety)
+export const CHAT_TEMPLATES_VN = {
+    GREETING: [
+        "Chào anh em nhé", "Lô cả nhà", "Hế lô mọi người", "Mới vào game, ai chỉ giáo với", "Chào các pro", "Lô anh em thiện lành", 
+        "Có ai onl không?", "Chúc anh em leo rank vui vẻ", "Sáng sớm vắng thế", "Đêm rồi còn ai thức không", "Hello ae", "Hi all"
+    ],
+    BRAG: [
+        "Vừa làm chuỗi 10 win, ez game", "Game này dễ quá vậy", "Top 1 server là tao", "Ai solo không? Chấp 1 tay", "Rank Kim Cương ở đây toàn gà", 
+        "Mới nạp gói VIP đánh sướng tay vãi", "Đội hình full Kỵ Binh vô đối", "Vừa hành thằng top 2 ra bã", "Đánh mãi không thua chán quá",
+        "Có ai đánh lại tao không?", "Rank này không có đối thủ", "Easy game easy life"
+    ],
+    COMPLAIN: [
+        "Game lag vãi chưởng", "Mạng chán quá đi mất", "Đen thôi đỏ quên đi", "Gặp thằng hack hay sao mà trâu thế", "Sao lính nó ra nhanh vậy?",
+        "Admin fix lại lỗi kẹt lính đi", "Thua 5 trận thông rồi cay vãi", "Cày tiền lâu quá", "Map mùa đông khó thủ thật sự",
+        "Xui quá toàn gặp cao thủ", "Mới vào đã gặp ngay thằng Top 1", "Game bịp thực sự"
+    ],
+    STRATEGY: [
+        "Map sa mạc nên chơi full cung hay full ngựa?", "Ai biết cách khắc chế mưa tên không?", "Tướng nào thủ nhà ngon nhất anh em?",
+        "Có nên nâng max thợ mỏ trước không?", "Tháp canh bắn yếu quá phí tiền", "Kỵ binh mùa này bá đạo thật",
+        "Chiến thuật lấy thịt đè người vẫn hiệu quả nhất", "Nâng max sấm sét dọn lính phê cực", "Đừng mua lính kiếm, yếu lắm",
+        "Cứ tích tiền mua tướng là win"
+    ],
+    INVITE: [
+        "Ai solo 1vs1 không?", "Tạo phòng rồi nha, ai vào giao lưu", "Cần tìm người test tướng", "Ai rảnh vào room 123 hành nhau tý",
+        "Solo Yasuo không bạn êi?", "Tìm đối thủ xứng tầm", "Vào phòng tao nè, pass 123", "Ai kết bạn leo rank chung không?"
+    ],
+    REPLY_AGREE: [
+        "Chuẩn luôn bác", "Công nhận", "Đúng rồi đó", "Like mạnh", "Thật sự", "Nói chuẩn vãi", "Y chang tui nghĩ", "+1 uy tín"
+    ],
+    REPLY_DISAGREE: [
+        "Không đâu, sai rồi", "Tào lao", "Chém gió vừa thôi", "Gà mới nghĩ thế", "Thử đi rồi biết", "Sai bét", "Chưa chắc đâu"
+    ],
+    REPLY_LAUGH: [
+        "Kkkk", "Haha hài vãi", "Cười ẻ", ":)))", "Vãi chưởng", "Ảo thật đấy", "Hề chúa", "LMAO", "LOL"
+    ]
+};
 
-// MEDIUM (Occasional - 9%)
-export const CHAT_VN_MEDIUM = [
-    "Có ai biết cách qua màn 20 không?", "Leo rank mệt mỏi thực sự.", "Rank Vàng ở đây gà thế nhỉ?", "Cần tìm sư phụ dạy chơi.", "Map mùa đông khó thủ quá.", 
-    "Lên đồ gì cho Tướng ngon nhất?", "Mãi mới được 1 trận thắng.", "Hôm nay xui quá thua liên tục.", "Ai có bang hội cho xin slot.", "Cày tiền mua lính lâu quá."
-];
-
-export const CHAT_EN_MEDIUM = [
-    "Anyone want to practice 1v1?", "No toxic players please.", "How to beat level 40?", "Looking for a guild.", "Just hit Challenger rank!", 
-    "Nerf cavalry please.", "My internet is so bad today.", "Finally won a match.", "Best strategy for desert map?", "Need gold farming tips."
-];
-
-// LONG (Rare - 1%) - Capped at 120 chars
-export const CHAT_VN_LONG = [
-    "Nãy đang thắng thế thì mẹ gọi đi ăn cơm, bỏ máy thế là thua ngược cay vãi chưởng anh em ạ.", 
-    "Game này công nhận hay, mà cày tiền hơi lâu. Admin xem xét tăng vàng màn boss lên xíu được không?",
-    "Thề luôn, gặp ông nào cầm full Kỵ binh sợ thật, nó ủi một phát bay hết cả hàng thủ. Ai chỉ cách khắc chế với?",
-    "Hôm nay đen thật sự, đánh 10 trận thua 8, từ Kim Cương rớt xuống Bạch Kim luôn rồi. Ai gánh tôi với?",
-    "Anh em cho hỏi cái nâng cấp tháp canh có tác dụng nhiều không? Thấy bắn cũng yếu mà tốn vàng quá."
-];
-
-export const CHAT_EN_LONG = [
-    "I swear the RNG in this game hates me. I had a 10 win streak and now I'm back to Bronze. Help me.", 
-    "Just discovered a strat with mass miners and one hero, works pretty well on the desert map early game.",
-    "Why does the enemy AI always seem to have more gold than me? Is it cheating or am I just bad at economy?",
-    "Can someone explain how the rank system works exactly? I won a game but got +0 Elo, is that a bug?",
-    "GG well played to the guy I just fought, that was the most intense match I've had in weeks!"
-];
-
-// Combine for backward compatibility if needed, though we use splits now
-export const CHAT_VN = [...CHAT_VN_SHORT, ...CHAT_VN_MEDIUM, ...CHAT_VN_LONG];
-export const CHAT_EN = [...CHAT_EN_SHORT, ...CHAT_EN_MEDIUM, ...CHAT_EN_LONG];
+export const CHAT_TEMPLATES_EN = {
+    GREETING: [
+        "Hello everyone", "Hi guys", "Anyone here?", "Good morning warriors", "Yo", "Greetings from Brazil", "Hi all", "New here", "Lets play"
+    ],
+    BRAG: [
+        "Just got a 10 win streak", "Too ez", "This game is too simple", "Im the king of this server", "Who wants to lose?", "Diamond rank is a joke",
+        "My strategy is unbeatable", "Bow down to the top 1", "Just destroyed a Legend rank player", "Anyone worthy here?"
+    ],
+    COMPLAIN: [
+        "Lag is real", "Fix the servers pls", "So much lag", "I hate the ice map", "Why is the enemy so rich?", "Is this a bug?",
+        "Lost 5 games in a row, deleting game", "Too hard for f2p", "RNG hates me", "Unfair matching"
+    ],
+    STRATEGY: [
+        "Spamming archers is op", "How to beat level 50?", "Miners are key to victory", "Dont buy towers, they suck", "Cavalry rush is the meta",
+        "Upgrade hero first or units?", "Thunder spell is broken", "Defensive playstyle is boring", "Best build for PvP?"
+    ],
+    INVITE: [
+        "1v1 me bro", "Join my room", "Looking for sparring partner", "Custom match anyone?", "Add me for friendly match", "Lets duel"
+    ],
+    REPLY_AGREE: [
+        "True", "Agreed", "Facts", "Same here", "Absolutely", "You are right", "+1"
+    ],
+    REPLY_DISAGREE: [
+        "Nah", "Nope", "You are wrong", "Skill issue", "Git gud", "Not really", "Fake news"
+    ],
+    REPLY_LAUGH: [
+        "Lol", "Lmao", "Haha", "Rofl", "Funny", "xD", ":D"
+    ]
+};
 
 export const ROOM_NAMES_VN = ["Giao lưu vui vẻ", "Tập luyện", "Thử nghiệm đội hình", "Vào là chiến", "Solo Yasuo", "Không chơi bẩn", "Tuyển bạn gái", "Phòng của Pro", "Newbie tập chơi", "Test tướng"];
 export const ROOM_NAMES_EN = ["1v1 Chill", "Practice", "Testing Builds", "Fight Club", "Noobs Only", "Pros Only", "Join Fast", "Friendly Match", "Casual Game", "Test Hero"];

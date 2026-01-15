@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { PlayerProfile, Language, RankTier, ChatMessage, LobbyRoom } from '../types';
-import { generateBotNames, LEVEL_THEMES, getRankTier, CHAT_VN_SHORT, CHAT_VN_MEDIUM, CHAT_VN_LONG, CHAT_EN_SHORT, CHAT_EN_MEDIUM, CHAT_EN_LONG, NAMES_VN, ROOM_NAMES_VN, ROOM_NAMES_EN, getAvatarUrl } from '../constants';
+import { generateBotNames, LEVEL_THEMES, getRankTier, NAMES_VN, ROOM_NAMES_VN, ROOM_NAMES_EN, getAvatarUrl, CHAT_TEMPLATES_VN, CHAT_TEMPLATES_EN, CHAT_TOPICS } from '../constants';
 
 interface OnlineLobbyProps {
   onStartMatch: (opponentName: string, opponentElo: number, mapThemeIndex: number, isSpectator?: boolean, isRanked?: boolean) => void;
@@ -12,6 +12,7 @@ interface OnlineLobbyProps {
 // Keys for "Fake Server"
 const STORAGE_KEY_CHAT = 'stickman_global_chat_v1';
 const STORAGE_KEY_USER_ROOMS = 'stickman_user_rooms_v1';
+const STORAGE_KEY_BOT_ROOMS = 'stickman_bot_rooms_v1'; // NEW: Persist bot rooms
 
 // Helper to get random item
 function getRandom<T>(arr: T[]): T {
@@ -26,7 +27,7 @@ const getAdjacentTiers = (current: RankTier): RankTier[] => {
     return tiers.slice(min, max + 1);
 };
 
-// Reuse RankIcon (No changes needed here, just keep the export)
+// Reuse RankIcon
 export const RankIcon: React.FC<{ tier: RankTier, className?: string }> = ({ tier, className }) => {
     const getDefs = () => (
         <defs>
@@ -117,11 +118,22 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
   const [isInviting, setIsInviting] = useState(false);
   const [inviteStatus, setInviteStatus] = useState<'NONE' | 'SENDING' | 'ACCEPTED' | 'REJECTED'>('NONE');
   
+  // Avatar Selection State
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+  const avatarSeeds = useRef<string[]>([]);
+  
   const [searchTimer, setSearchTimer] = useState(0);
   
   const leaderboardRef = useRef<PlayerProfile[]>([]);
   const currentPlayerNameRef = useRef<string>('');
   const chatScrollRef = useRef<HTMLDivElement>(null);
+
+  // Initialize 500 Avatar Seeds
+  if (avatarSeeds.current.length === 0) {
+      for(let i = 0; i < 500; i++) {
+          avatarSeeds.current.push(`avatar_v1_${i}`);
+      }
+  }
 
   // --- SYNC ENGINE (LocalStorage Listener) ---
   useEffect(() => {
@@ -133,6 +145,10 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
 
               const savedRooms = localStorage.getItem(STORAGE_KEY_USER_ROOMS);
               if (savedRooms) setSharedRooms(JSON.parse(savedRooms));
+              
+              // PERSISTENT BOT ROOMS: Load existing rooms to feel like a real lobby
+              const savedBotRooms = localStorage.getItem(STORAGE_KEY_BOT_ROOMS);
+              if (savedBotRooms) setBotRooms(JSON.parse(savedBotRooms));
           } catch (e) { console.error("Sync Error", e); }
       };
       
@@ -171,9 +187,9 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
         try { fakeLb = JSON.parse(savedLb); } catch (e) { fakeLb = []; }
     } 
     
-    // Ensure we have 1200 bots as requested
-    if (fakeLb.length < 1200) {
-        const generatedNames = generateBotNames(1200);
+    // INCREASED BOT COUNT TO 1500
+    if (fakeLb.length < 1500) {
+        const generatedNames = generateBotNames(1500);
         fakeLb = generatedNames.map(name => {
             const r = Math.random();
             let baseElo = Math.floor(r < 0.4 ? Math.random() * 250 : r < 0.7 ? 250 + Math.random() * 300 : r < 0.85 ? 550 + Math.random() * 350 : r < 0.95 ? 900 + Math.random() * 400 : 1300 + Math.random() * 1000);
@@ -228,7 +244,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
     leaderboardRef.current = fakeLb;
 
     const interval = setInterval(runBotSimulation, 5000); 
-    const chatInterval = setInterval(runChatSimulation, 2500); 
+    const chatInterval = setInterval(runChatSimulation, 3500); // Slower to let chat read better 
     const roomInterval = setInterval(runRoomSimulation, 4000); 
 
     return () => {
@@ -268,26 +284,82 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
       setLeaderboard(prev => [...lb]); 
   };
 
+  // --- SMART CHAT SYSTEM ---
   const runChatSimulation = () => {
-      if (Math.random() > 0.4) return;
-      const lb = leaderboardRef.current;
-      const randomBot = lb[Math.floor(Math.random() * lb.length)];
-      if (randomBot.name === currentPlayerNameRef.current) return;
-
-      const rand = Math.random();
-      const isVN = NAMES_VN.some(n => randomBot.name.includes(n)) || Math.random() > 0.5;
+      if (Math.random() > 0.5) return; // Not too spammy
       
-      let msg = '';
-      if (rand > 0.99) { msg = isVN ? getRandom(CHAT_VN_LONG) : getRandom(CHAT_EN_LONG); } 
-      else if (rand > 0.90) { msg = isVN ? getRandom(CHAT_VN_MEDIUM) : getRandom(CHAT_EN_MEDIUM); } 
-      else { msg = isVN ? getRandom(CHAT_VN_SHORT) : getRandom(CHAT_EN_SHORT); }
+      const lb = leaderboardRef.current;
+      const history = chatHistory;
+      const lastMsg = history.length > 0 ? history[history.length - 1] : null;
+      
+      // Filter valid bots (Idle/Waiting, not player)
+      const potentialBots = lb.filter(p => p.name !== currentPlayerNameRef.current && (p.status === 'IDLE' || p.status === 'WAITING'));
+      if (potentialBots.length === 0) return;
+      
+      // Explicitly cast to PlayerProfile to satisfy TypeScript unknown inference
+      const randomBot = getRandom(potentialBots) as PlayerProfile;
+      const isVN = NAMES_VN.some(n => randomBot.name.includes(n)) || Math.random() > 0.5;
+      const TEMPLATES = isVN ? CHAT_TEMPLATES_VN : CHAT_TEMPLATES_EN;
+      
+      let msg = "";
+      
+      // DECIDE: Reply or New Topic?
+      const shouldReply = lastMsg && !lastMsg.isSystem && Math.random() < 0.6; // 60% chance to reply
+      
+      if (shouldReply && lastMsg) {
+          const content = lastMsg.text.toLowerCase();
+          
+          // Detect Topic from last message to reply intelligently
+          let foundTopic = false;
+          
+          // 1. Check for Laugh/Joke
+          if (content.includes("haha") || content.includes("lol") || content.includes("kkk")) {
+              msg = getRandom(TEMPLATES.REPLY_LAUGH);
+              foundTopic = true;
+          }
+          // 2. Check for Agree/Disagree
+          else if (content.includes("đúng") || content.includes("chuẩn") || content.includes("true") || content.includes("agree")) {
+              msg = getRandom(TEMPLATES.REPLY_AGREE);
+              foundTopic = true;
+          }
+          // 3. Check for specific keywords
+          else if (CHAT_TOPICS.BRAG.some(k => content.includes(k))) {
+              // Someone bragged -> Agree or Call them a noob
+              msg = Math.random() > 0.5 ? getRandom(TEMPLATES.REPLY_LAUGH) : (isVN ? "Ghê đấy" : "Wow nice");
+              foundTopic = true;
+          }
+          else if (CHAT_TOPICS.COMPLAIN.some(k => content.includes(k))) {
+              msg = getRandom(TEMPLATES.REPLY_AGREE); // Sympathize
+              foundTopic = true;
+          }
+          
+          if (!foundTopic) {
+              // Generic Reply if no topic found
+              msg = isVN ? "Chuẩn" : "Yeah";
+          }
+          
+          // Add mention sometimes
+          if (Math.random() < 0.4) {
+              msg = `@${lastMsg.sender} ${msg}`;
+          }
+          
+      } else {
+          // NEW TOPIC
+          const topics = ['GREETING', 'BRAG', 'COMPLAIN', 'STRATEGY', 'INVITE'];
+          const pickedTopic = getRandom(topics);
+          // @ts-ignore
+          msg = getRandom(TEMPLATES[pickedTopic]);
+      }
+
+      // Check Duplicates in last 5 messages
+      const recentTexts = history.slice(-5).map(m => m.text);
+      if (recentTexts.includes(msg)) return; // Skip if duplicate
 
       let topRank: number | undefined = undefined;
-      if (randomBot.rankedStats.elo > 1000) { 
-          const sortedLb = [...lb].sort((a,b) => b.rankedStats.elo - a.rankedStats.elo);
-          const idx = sortedLb.findIndex(p => p.name === randomBot.name);
-          if (idx !== -1) topRank = idx + 1;
-      }
+      // Calculate Rank dynamically for bots
+      const sortedLb = [...lb].sort((a,b) => b.rankedStats.elo - a.rankedStats.elo);
+      const idx = sortedLb.findIndex(p => p.name === randomBot.name);
+      if (idx !== -1 && idx < 100) topRank = idx + 1;
 
       const newMsg: ChatMessage = {
           id: Math.random().toString(),
@@ -318,9 +390,10 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                   const total = next.length || 1;
                   const fillChance = (waitingCount / total) > 0.4 ? 0.5 : 0.15; 
 
-                  if (Math.random() < fillChance) {
-                      const guest = getRandom<PlayerProfile>(leaderboardRef.current);
-                      if (guest.name !== room.host) {
+                  if (Math.random() < fillChance && leaderboardRef.current.length > 0) {
+                      // Explicit cast to PlayerProfile
+                      const guest = getRandom(leaderboardRef.current) as PlayerProfile;
+                      if (guest && guest.name !== room.host) {
                           return {
                               ...room,
                               status: 'PLAYING',
@@ -337,8 +410,9 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
           // Target ~80 Bot Rooms. 
           const MAX_BOT_ROOMS = 80;
           
-          if (next.length < MAX_BOT_ROOMS) {
-              const host = getRandom<PlayerProfile>(leaderboardRef.current);
+          if (next.length < MAX_BOT_ROOMS && leaderboardRef.current.length > 0) {
+              // Explicit cast to PlayerProfile
+              const host = getRandom(leaderboardRef.current) as PlayerProfile;
               const isVN = NAMES_VN.some(n => host.name.includes(n));
               const roomName = isVN ? getRandom(ROOM_NAMES_VN) : getRandom(ROOM_NAMES_EN);
               
@@ -348,7 +422,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
               let guestElo: number | undefined;
 
               if (startAsPlaying) {
-                  const guest = getRandom<PlayerProfile>(leaderboardRef.current);
+                  const guest = getRandom(leaderboardRef.current) as PlayerProfile;
                   guestName = guest.name;
                   guestElo = guest.rankedStats.elo;
               }
@@ -366,6 +440,9 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
               });
           }
           
+          // SAVE ROOMS TO LOCAL STORAGE (PERSISTENCE)
+          localStorage.setItem(STORAGE_KEY_BOT_ROOMS, JSON.stringify(next));
+
           return next;
       });
   };
@@ -386,14 +463,13 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
     }
   };
 
-  // Change Player Avatar
-  const handleChangeAvatar = () => {
+  // Change Player Avatar from Modal
+  const handleSelectAvatar = (seed: string) => {
       if (!myProfile) return;
-      const newSeed = Math.random().toString(36).substring(7);
       
       const newLb = leaderboard.map(p => {
           if (p.name === playerName) {
-              return { ...p, avatarSeed: newSeed };
+              return { ...p, avatarSeed: seed };
           }
           return p;
       });
@@ -401,10 +477,11 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
       setLeaderboard(newLb);
       leaderboardRef.current = newLb;
       localStorage.setItem('stickman_bots_v4', JSON.stringify(newLb));
+      setIsAvatarModalOpen(false);
       
-      // Update selected profile view if showing me
+      // Update selected profile view if open
       if (selectedProfile && selectedProfile.name === playerName) {
-          setSelectedProfile({ ...selectedProfile, avatarSeed: newSeed });
+          setSelectedProfile({ ...selectedProfile, avatarSeed: seed });
       }
   };
 
@@ -556,12 +633,86 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
   };
 
   const getSenderBadge = (rank?: number) => {
-      if (!rank) return null;
-      if (rank === 1) return <span title="Top 1">👑</span>;
-      if (rank <= 10) return <span title="Top 10">🔥</span>;
-      if (rank <= 50) return <span title="Top 50">💎</span>;
-      if (rank <= 100) return <span title="Top 100">✨</span>;
+      if (!rank || rank > 100) return null;
+      
+      // TOP 1: Yellow with Red Outline, Highlight
+      if (rank === 1) {
+          return <span className="bg-yellow-400 text-red-900 border-2 border-red-600 text-[10px] px-1.5 py-0.5 rounded font-black mr-1 shadow-[0_0_8px_rgba(234,179,8,0.8)] animate-pulse" title="CHAMPION">TOP 1</span>;
+      }
+      // TOP 10 (Rank 2-10): Red
+      if (rank <= 10) {
+          return <span className="bg-gradient-to-r from-red-600 to-red-500 text-white border border-red-400 text-[9px] px-1 rounded font-bold mr-1" title="Top 10">TOP 10</span>;
+      }
+      // TOP 50 (Rank 11-50): Purple
+      if (rank <= 50) {
+          return <span className="bg-purple-600 text-white border border-purple-400 text-[9px] px-1 rounded font-bold mr-1" title="Top 50">TOP 50</span>;
+      }
+      // TOP 100 (Rank 51-100): Cyan/Blue
+      if (rank <= 100) {
+          return <span className="bg-cyan-600 text-white border border-cyan-400 text-[9px] px-1 rounded font-bold mr-1" title="Top 100">TOP 100</span>;
+      }
       return null;
+  };
+
+  const renderAvatarSelectionModal = () => {
+      if (!isAvatarModalOpen || !myProfile) return null;
+      
+      // Calculate my rank info again for the header
+      const sortedLb = [...leaderboard].sort((a,b) => b.rankedStats.elo - a.rankedStats.elo);
+      const myRank = sortedLb.findIndex(p => p.name === playerName) + 1;
+      
+      return (
+          <div className="absolute inset-0 z-[70] bg-black/90 flex items-center justify-center p-4" onClick={() => setIsAvatarModalOpen(false)}>
+              <div className="bg-slate-800 border-2 border-slate-600 w-full max-w-4xl h-[90vh] rounded-xl flex flex-col shadow-2xl relative" onClick={e => e.stopPropagation()}>
+                  <button className="absolute top-2 right-4 text-slate-400 hover:text-white text-2xl z-10" onClick={() => setIsAvatarModalOpen(false)}>✕</button>
+                  
+                  {/* HEADER: PLAYER INFO */}
+                  <div className="p-4 border-b border-slate-700 bg-slate-900 rounded-t-xl flex items-center gap-6">
+                      <div className="w-20 h-20 rounded-full border-4 border-blue-500 overflow-hidden bg-slate-800 shadow-lg">
+                          <img src={getAvatarUrl(myProfile.avatarSeed)} alt="Current" className="w-full h-full object-cover" />
+                      </div>
+                      <div>
+                          <div className="flex items-center gap-2">
+                              <h2 className="text-3xl font-black text-white">{myProfile.name}</h2>
+                              {getSenderBadge(myRank <= 100 ? myRank : undefined)}
+                          </div>
+                          <div className="flex items-center gap-4 mt-1">
+                              <div className="flex items-center gap-1">
+                                  <RankIcon tier={myProfile.rankTier} className="w-6 h-6" />
+                                  <span className="text-yellow-500 font-mono font-bold text-lg">{myProfile.rankedStats.elo} Elo</span>
+                              </div>
+                              <div className="text-slate-400 font-bold">Wins: <span className="text-green-400">{myProfile.rankedStats.wins}</span></div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="p-4 bg-slate-800 border-b border-slate-700">
+                      <h3 className="text-white font-bold text-lg">CHOOSE AVATAR (500+ Options)</h3>
+                      <p className="text-slate-400 text-sm">Select an avatar to represent you in the Arena.</p>
+                  </div>
+
+                  {/* GRID OF AVATARS */}
+                  <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-slate-900/50">
+                      <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                          {avatarSeeds.current.map((seed, idx) => (
+                              <button 
+                                key={seed}
+                                onClick={() => handleSelectAvatar(seed)}
+                                className={`aspect-square rounded-lg border-2 overflow-hidden hover:scale-105 transition-all bg-slate-800 relative group ${myProfile.avatarSeed === seed ? 'border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'border-slate-700 hover:border-blue-400'}`}
+                              >
+                                  <img src={getAvatarUrl(seed)} alt={`Avatar ${idx}`} className="w-full h-full object-cover" loading="lazy" />
+                                  {myProfile.avatarSeed === seed && (
+                                      <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
+                                          <span className="text-2xl">✓</span>
+                                      </div>
+                                  )}
+                              </button>
+                          ))}
+                      </div>
+                  </div>
+              </div>
+          </div>
+      );
   };
 
   const renderDetailModal = () => {
@@ -571,22 +722,24 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
               <div className="bg-slate-800 border-2 border-slate-600 p-6 rounded-xl w-full max-w-sm shadow-2xl relative" onClick={e => e.stopPropagation()}>
                   <button className="absolute top-2 right-4 text-slate-400 hover:text-white text-xl" onClick={() => setSelectedProfile(null)}>✕</button>
                   <div className="flex flex-col items-center mb-6">
-                       <div className="w-20 h-20 bg-slate-700 rounded-full flex items-center justify-center border-2 border-blue-500 mb-2 relative overflow-hidden">
+                       {/* AVATAR CLICKABLE FOR ME */}
+                       <div 
+                            className={`w-24 h-24 bg-slate-700 rounded-full flex items-center justify-center border-4 ${selectedProfile.name === playerName ? 'border-blue-500 cursor-pointer hover:border-white transition-colors' : 'border-slate-500'} mb-2 relative overflow-hidden shadow-lg`}
+                            onClick={() => selectedProfile.name === playerName && setIsAvatarModalOpen(true)}
+                       >
                            {selectedProfile.avatarSeed ? (
                                <img src={getAvatarUrl(selectedProfile.avatarSeed)} alt="Avatar" className="w-full h-full object-cover" />
                            ) : (
                                <RankIcon tier={selectedProfile.rankTier} className="w-16 h-16" />
                            )}
-                           {/* CHANGE AVATAR BUTTON (ONLY FOR ME) */}
+                           {/* OVERLAY ICON FOR EDIT */}
                            {selectedProfile.name === playerName && (
-                               <button 
-                                onClick={handleChangeAvatar}
-                                className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-500 text-white text-[10px] p-1 rounded-tl" 
-                                title="Change Avatar">
-                                   🔄
-                               </button>
+                               <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                                   <span className="text-2xl">📷</span>
+                               </div>
                            )}
                        </div>
+                       
                        <h3 className="text-2xl font-black text-white tracking-wide uppercase">{selectedProfile.name}</h3>
                        <div className={`text-xs font-bold mt-1 px-2 py-0.5 rounded ${selectedProfile.status === 'PLAYING' ? 'bg-red-900 text-red-400' : selectedProfile.status === 'WAITING' ? 'bg-yellow-900 text-yellow-400' : 'bg-green-900 text-green-400'}`}>
                            {selectedProfile.status}
@@ -619,6 +772,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
   };
 
   const myProfile = leaderboard.find(p => p.name === playerName);
+  // Calculate Rank for Top Bar Display
+  const myRankForBar = myProfile ? [...leaderboard].sort((a,b) => b.rankedStats.elo - a.rankedStats.elo).findIndex(p => p.name === playerName) + 1 : undefined;
 
   const displayRooms = [...sharedRooms, ...botRooms].sort((a, b) => {
       const aIsShared = sharedRooms.some(r => r.id === a.id);
@@ -697,6 +852,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
     <div className="w-full max-w-7xl h-[85vh] flex flex-col animate-fade-in bg-slate-900 rounded-lg shadow-2xl overflow-hidden border border-slate-700 relative">
         {renderDetailModal()}
         {renderInviteModal()}
+        {renderAvatarSelectionModal()}
 
         {/* HEADER */}
         <div className="bg-slate-800 p-3 border-b border-slate-600 flex justify-between items-center shadow-md z-10 h-16">
@@ -705,13 +861,23 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                 <h2 className="text-xl font-black italic text-blue-400">ONLINE ARENA</h2>
             </div>
             
-            <div className="flex items-center gap-4 cursor-pointer hover:bg-slate-700 px-2 py-1 rounded transition-all" onClick={() => myProfile && setSelectedProfile(myProfile)}>
+            <div 
+                className="flex items-center gap-4 cursor-pointer hover:bg-slate-700 px-2 py-1 rounded transition-all group" 
+                onClick={() => myProfile && setSelectedProfile(myProfile)}
+            >
                 <div className="flex flex-col items-end">
-                    <span className="font-bold text-white text-lg tracking-wide">{playerName}</span>
-                    <span className="text-[10px] text-blue-300 uppercase font-bold tracking-widest">{myProfile?.rankedStats.elo || 100} ELO</span>
+                    <div className="flex items-center gap-2">
+                        {/* Show Top Rank Badge if applicable */}
+                        {myRankForBar && getSenderBadge(myRankForBar <= 100 ? myRankForBar : undefined)}
+                        <span className="font-bold text-white text-lg tracking-wide">{playerName}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <RankIcon tier={myProfile?.rankTier || RankTier.BRONZE} className="w-4 h-4" />
+                        <span className="text-[10px] text-blue-300 uppercase font-bold tracking-widest">{myProfile?.rankedStats.elo || 100} ELO</span>
+                    </div>
                 </div>
                 {/* MY MINI AVATAR */}
-                <div className="w-10 h-10 rounded-full border-2 border-blue-500 overflow-hidden bg-slate-900">
+                <div className="w-10 h-10 rounded-full border-2 border-blue-500 group-hover:border-white transition-colors overflow-hidden bg-slate-900 relative">
                     <img src={getAvatarUrl(myProfile?.avatarSeed || playerName)} alt="Me" className="w-full h-full object-cover" />
                 </div>
             </div>
@@ -930,7 +1096,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
             <div className="w-72 bg-slate-800 border-l border-slate-700 flex flex-col">
                 <div className="flex border-b border-slate-700">
                     <button onClick={() => setActiveTab('CHAT')} className={`flex-1 py-3 text-xs font-bold ${activeTab === 'CHAT' ? 'bg-slate-700 text-white border-b-2 border-blue-500' : 'text-slate-400 hover:bg-slate-700/50'}`}>CHAT</button>
-                    <button onClick={() => setActiveTab('ONLINE')} className={`flex-1 py-3 text-xs font-bold ${activeTab === 'ONLINE' ? 'bg-slate-700 text-white border-b-2 border-blue-500' : 'text-slate-400 hover:bg-slate-700/50'}`}>ONLINE (1200+)</button>
+                    <button onClick={() => setActiveTab('ONLINE')} className={`flex-1 py-3 text-xs font-bold ${activeTab === 'ONLINE' ? 'bg-slate-700 text-white border-b-2 border-blue-500' : 'text-slate-400 hover:bg-slate-700/50'}`}>ONLINE (1500+)</button>
                     <button onClick={() => setActiveTab('LEADERBOARD')} className={`flex-1 py-3 text-xs font-bold ${activeTab === 'LEADERBOARD' ? 'bg-slate-700 text-white border-b-2 border-blue-500' : 'text-slate-400 hover:bg-slate-700/50'}`}>TOP</button>
                 </div>
 
@@ -987,7 +1153,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                     {activeTab === 'LEADERBOARD' && (
                         <table className="w-full text-left text-xs">
                             <tbody>
-                                {leaderboard.sort((a,b) => b.rankedStats.elo - a.rankedStats.elo).slice(0, 50).map((p, idx) => (
+                                {leaderboard.sort((a,b) => b.rankedStats.elo - a.rankedStats.elo).slice(0, 100).map((p, idx) => (
                                     <tr key={idx} onClick={() => setSelectedProfile(p)} className="border-b border-slate-800 hover:bg-slate-800 cursor-pointer">
                                         <td className="p-2 text-slate-500 font-mono">
                                             {idx < 3 ? ['🥇','🥈','🥉'][idx] : idx + 1}
