@@ -23,7 +23,7 @@ const getAdjacentTiers = (current: RankTier): RankTier[] => {
 };
 
 // --- NEW RANK ICON COMPONENT ---
-const RankIcon: React.FC<{ tier: RankTier, className?: string }> = ({ tier, className }) => {
+export const RankIcon: React.FC<{ tier: RankTier, className?: string }> = ({ tier, className }) => {
     // Define Gradients and Shapes based on Tier
     const getDefs = () => (
         <defs>
@@ -74,7 +74,6 @@ const RankIcon: React.FC<{ tier: RankTier, className?: string }> = ({ tier, clas
             case RankTier.BRONZE:
                 return (
                     <g>
-                        {/* Triangle Shield */}
                         <path d="M50 10 L90 30 L50 95 L10 30 Z" fill="url(#gradBronze)" stroke="#5c3a1b" strokeWidth="2" />
                         <path d="M50 20 L80 35 L50 85 L20 35 Z" fill="#ffffff" fillOpacity="0.2" />
                     </g>
@@ -82,7 +81,6 @@ const RankIcon: React.FC<{ tier: RankTier, className?: string }> = ({ tier, clas
             case RankTier.SILVER:
                 return (
                     <g>
-                        {/* Diamond Shape */}
                         <path d="M50 5 L95 50 L50 95 L5 50 Z" fill="url(#gradSilver)" stroke="#475569" strokeWidth="2" />
                         <path d="M50 15 L85 50 L50 85 L15 50 Z" fill="none" stroke="#fff" strokeWidth="1" opacity="0.5" />
                     </g>
@@ -90,7 +88,6 @@ const RankIcon: React.FC<{ tier: RankTier, className?: string }> = ({ tier, clas
             case RankTier.GOLD:
                 return (
                     <g>
-                        {/* Pentagon Shield */}
                         <path d="M50 5 L95 35 L80 90 L20 90 L5 35 Z" fill="url(#gradGold)" stroke="#854d0e" strokeWidth="2" />
                         <path d="M50 20 L80 40 L70 80 L30 80 L20 40 Z" fill="#fff" fillOpacity="0.2" />
                         <circle cx="50" cy="50" r="10" fill="#fff" fillOpacity="0.4" />
@@ -99,7 +96,6 @@ const RankIcon: React.FC<{ tier: RankTier, className?: string }> = ({ tier, clas
             case RankTier.PLATINUM:
                 return (
                     <g>
-                        {/* Complex Geometric */}
                         <path d="M50 5 L85 25 L85 75 L50 95 L15 75 L15 25 Z" fill="url(#gradPlatinum)" stroke="#164e63" strokeWidth="2" />
                         <path d="M50 5 L85 25 M85 75 L50 95 M15 75 L50 95 M15 75 L15 25 M15 25 L50 5" stroke="#fff" strokeWidth="1" opacity="0.6" />
                         <path d="M50 25 L70 35 L70 65 L50 75 L30 65 L30 35 Z" fill="#0891b2" stroke="#fff" strokeWidth="1" />
@@ -108,7 +104,6 @@ const RankIcon: React.FC<{ tier: RankTier, className?: string }> = ({ tier, clas
             case RankTier.DIAMOND:
                 return (
                     <g>
-                        {/* Crystal Shards */}
                         <path d="M50 0 L80 20 L100 50 L80 80 L50 100 L20 80 L0 50 L20 20 Z" fill="url(#gradDiamond)" stroke="#1e3a8a" strokeWidth="2" />
                         <circle cx="50" cy="50" r="25" fill="#2563eb" stroke="#93c5fd" strokeWidth="2" />
                         <path d="M50 25 L75 50 L50 75 L25 50 Z" fill="#93c5fd" />
@@ -117,12 +112,9 @@ const RankIcon: React.FC<{ tier: RankTier, className?: string }> = ({ tier, clas
             case RankTier.CHALLENGER:
                 return (
                     <g filter="url(#glow)">
-                        {/* Spiked Crest */}
                         <path d="M50 100 L20 80 L20 30 L50 5 L80 30 L80 80 Z" fill="url(#gradChallenger)" stroke="#3b0764" strokeWidth="3" />
-                        {/* Wings */}
                         <path d="M15 30 L0 10 L30 20 Z" fill="#a855f7" />
                         <path d="M85 30 L100 10 L70 20 Z" fill="#a855f7" />
-                        {/* Center Eye */}
                         <ellipse cx="50" cy="50" rx="15" ry="20" fill="#3b0764" />
                         <ellipse cx="50" cy="50" rx="8" ry="12" fill="#d8b4fe" />
                     </g>
@@ -130,7 +122,6 @@ const RankIcon: React.FC<{ tier: RankTier, className?: string }> = ({ tier, clas
             case RankTier.LEGEND:
                 return (
                     <g filter="url(#glow)">
-                        {/* Crown/Legend Shape */}
                         <path d="M50 95 L20 70 L10 20 L30 40 L50 10 L70 40 L90 20 L80 70 Z" fill="url(#gradLegend)" stroke="#7f1d1d" strokeWidth="2" />
                         <path d="M50 95 L50 50" stroke="#fca5a5" strokeWidth="2" />
                         <circle cx="50" cy="35" r="8" fill="#fff" />
@@ -156,18 +147,13 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
   const [leaderboard, setLeaderboard] = useState<PlayerProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<PlayerProfile | null>(null);
   
-  // Custom Room State
   const [customMapIndex, setCustomMapIndex] = useState(0);
   const [customOpponent, setCustomOpponent] = useState<PlayerProfile | null>(null);
-
-  // Ranked Search State
   const [searchTimer, setSearchTimer] = useState(0);
   
-  // Refs for Simulation Loop
   const leaderboardRef = useRef<PlayerProfile[]>([]);
   const currentPlayerNameRef = useRef<string>('');
 
-  // Initialize Data & Ecosystem
   useEffect(() => {
     const savedName = localStorage.getItem('stickman_player_name');
     if (savedName) {
@@ -176,7 +162,6 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
         setView('HOME');
     }
     
-    // 1. GENERATE 600 BOTS
     let fakeLb: PlayerProfile[] = [];
     const savedLb = localStorage.getItem('stickman_bots_v4'); 
     
@@ -185,22 +170,19 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
     } else {
         const generatedNames = generateBotNames(600);
         fakeLb = generatedNames.map(name => {
-            // Random Elo distribution
             const r = Math.random();
             let baseElo = 0;
-            if (r < 0.4) baseElo = Math.random() * 250; // Bronze
-            else if (r < 0.7) baseElo = 250 + Math.random() * 300; // Silver
-            else if (r < 0.85) baseElo = 550 + Math.random() * 350; // Gold
-            else if (r < 0.95) baseElo = 900 + Math.random() * 400; // Plat
-            else baseElo = 1300 + Math.random() * 1000; // Diamond+
+            if (r < 0.4) baseElo = Math.random() * 250;
+            else if (r < 0.7) baseElo = 250 + Math.random() * 300;
+            else if (r < 0.85) baseElo = 550 + Math.random() * 350;
+            else if (r < 0.95) baseElo = 900 + Math.random() * 400;
+            else baseElo = 1300 + Math.random() * 1000;
 
             baseElo = Math.floor(baseElo);
             
-            // Random Stats
             const rankMatches = Math.floor(Math.random() * 300) + 10;
             const rankWinRate = 0.3 + ((baseElo / 2500) * 0.4); 
             const rankWins = Math.floor(rankMatches * rankWinRate);
-            
             const casualMatches = Math.floor(Math.random() * 200);
             const casualWins = Math.floor(casualMatches * (0.4 + Math.random() * 0.2));
 
@@ -230,7 +212,6 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
     return () => clearInterval(interval);
   }, []);
 
-  // --- BOT SIMULATION LOGIC ---
   const runBotSimulation = () => {
       const lb = [...leaderboardRef.current];
       const myName = currentPlayerNameRef.current;
@@ -443,6 +424,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
       );
   }
 
+  // ... rest of the file stays same
   if (view === 'LOGIN') {
       return (
           <div className="flex flex-col items-center justify-center h-[60vh] animate-fade-in">
@@ -471,7 +453,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                     </button>
                   </div>
                   <p className="text-slate-500 text-xs mt-4 text-center">
-                      * Nhập email sẽ tự động lấy 10 ký tự đầu làm tên (Ví dụ: abc@gmail.com -&gt; abc)
+                      * Nhập email sẽ tự động lấy 10 ký tự đầu làm tên (Ví dụ: abc@gmail.com -> abc)
                   </p>
               </div>
           </div>
@@ -484,19 +466,25 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
     <div className="w-full max-w-6xl h-[85vh] flex flex-col animate-fade-in bg-slate-900 rounded-lg shadow-2xl overflow-hidden border border-slate-700 relative">
         {renderDetailModal()}
 
-        {/* HEADER */}
+        {/* HEADER - ENHANCED FOR VISIBILITY */}
         <div className="bg-slate-800 p-4 border-b border-slate-600 flex justify-between items-center shadow-md z-10">
             <div className="flex items-center gap-4">
                 <button onClick={onBack} className="text-slate-400 hover:text-white font-bold text-xl">←</button>
                 <h2 className="text-2xl font-black italic text-blue-400">ONLINE ARENA</h2>
             </div>
             
-            <div className="flex items-center gap-6 bg-slate-900 px-4 py-1 rounded-lg border border-slate-700 cursor-pointer hover:bg-slate-800 transition-colors" onClick={() => myProfile && setSelectedProfile(myProfile)}>
+            <div 
+                className="flex items-center gap-4 bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-2 rounded-xl border border-blue-500/50 cursor-pointer hover:bg-slate-800 transition-all shadow-lg hover:scale-105" 
+                onClick={() => myProfile && setSelectedProfile(myProfile)}
+            >
                 <div className="flex flex-col items-end">
-                    <span className="font-bold text-white text-lg">{playerName}</span>
-                    <span className="text-[10px] text-slate-400">Click for Stats</span>
+                    <span className="font-bold text-white text-xl tracking-wide">{playerName}</span>
+                    <span className="text-[10px] text-blue-300 uppercase font-bold tracking-widest">View Profile</span>
                 </div>
-                {myProfile && renderRankBadge(myProfile.rankTier, myProfile.rankedStats.elo)}
+                {/* RANK ICON DISPLAY IN HEADER */}
+                <div className="bg-slate-900/50 p-1 rounded-lg border border-slate-700/50">
+                    {myProfile && renderRankBadge(myProfile.rankTier, myProfile.rankedStats.elo)}
+                </div>
             </div>
         </div>
 
