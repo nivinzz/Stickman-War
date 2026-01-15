@@ -217,17 +217,38 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center p-4 font-sans text-slate-100 select-none overflow-hidden relative">
       
       {gameState === 'MENU' && (
-        <div className="text-center space-y-6 animate-fade-in relative z-10">
-          <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-500 mb-2">STICKMAN WAR</h1>
+        <div className="text-center space-y-6 animate-fade-in relative z-10 w-full max-w-lg">
           
-          {/* VERSION TAG - DEPLOYMENT CHECKER */}
-          <div className="inline-block px-3 py-1 bg-green-500/20 border border-green-500 text-green-300 rounded font-mono text-sm mb-6">
-              VER 2.2 (FIXED BUILD)
+          {/* LANGUAGE TOGGLE */}
+          <div className="absolute top-4 right-4 flex gap-2">
+            <button 
+                onClick={() => setLang('VN')} 
+                className={`px-3 py-1 rounded border font-bold text-sm transition-all ${lang === 'VN' ? 'bg-red-600 border-red-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-white'}`}
+            >
+                🇻🇳 VN
+            </button>
+            <button 
+                onClick={() => setLang('EN')} 
+                className={`px-3 py-1 rounded border font-bold text-sm transition-all ${lang === 'EN' ? 'bg-blue-600 border-blue-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-white'}`}
+            >
+                🇬🇧 EN
+            </button>
           </div>
 
-          <div className="flex flex-col gap-4">
-            <button onClick={() => setGameState('LEVEL_SELECT')} className="px-8 py-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-2xl shadow-lg">CAMPAIGN</button>
-            <button onClick={() => setGameState('ONLINE_LOBBY')} className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xl shadow-lg">🌐 ONLINE PVP</button>
+          <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-500 mb-2">STICKMAN WAR</h1>
+          
+          {/* VERSION TAG */}
+          <div className="inline-block px-3 py-1 bg-slate-800 border border-slate-600 text-slate-400 rounded font-mono text-sm mb-6">
+              Ver 1.0
+          </div>
+
+          <div className="flex flex-col gap-4 w-full">
+            <button onClick={() => setGameState('LEVEL_SELECT')} className="px-8 py-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-2xl shadow-lg w-full">
+                {TRANS[lang].campaign}
+            </button>
+            <button onClick={() => setGameState('ONLINE_LOBBY')} className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xl shadow-lg w-full">
+                🌐 {TRANS[lang].onlinePvP}
+            </button>
           </div>
         </div>
       )}
@@ -249,7 +270,7 @@ const App: React.FC = () => {
                 <span>🪙 {gold}</span>
                 {isOnlineMatch && <span className="text-sm text-blue-300">VS {opponentName}</span>}
              </div>
-             <button onClick={handleBackToMenu} className="px-3 py-1 bg-slate-800 rounded text-xs text-red-400">EXIT</button>
+             <button onClick={handleBackToMenu} className="px-3 py-1 bg-slate-800 rounded text-xs text-red-400">{TRANS[lang].exit}</button>
           </div>
 
           <div className="relative">
@@ -273,13 +294,13 @@ const App: React.FC = () => {
       {(gameState === 'VICTORY' || gameState === 'DEFEAT') && (
         <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50">
           <div className="bg-slate-800 p-8 rounded-2xl border-2 border-slate-600 text-center">
-             <h2 className={`text-5xl font-black mb-4 ${gameState === 'VICTORY' ? 'text-green-500' : 'text-red-500'}`}>{gameState}</h2>
+             <h2 className={`text-5xl font-black mb-4 ${gameState === 'VICTORY' ? 'text-green-500' : 'text-red-500'}`}>{gameState === 'VICTORY' ? TRANS[lang].victory : TRANS[lang].defeat}</h2>
              {matchResult && (
                  <div className="text-xl mb-4">
                      Elo: {matchResult.oldElo} -> {matchResult.newElo} ({matchResult.eloChange > 0 ? '+' : ''}{matchResult.eloChange})
                  </div>
              )}
-             <button onClick={handleBackToMenu} className="px-6 py-3 border border-slate-500 text-white hover:bg-slate-700 rounded-lg font-bold">Main Menu</button>
+             <button onClick={handleBackToMenu} className="px-6 py-3 border border-slate-500 text-white hover:bg-slate-700 rounded-lg font-bold">{TRANS[lang].backMenu}</button>
           </div>
         </div>
       )}
