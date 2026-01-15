@@ -89,7 +89,6 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
   // UI States
   const [customMapIndex, setCustomMapIndex] = useState(0);
   const [chatInput, setChatInput] = useState('');
-  const [activeTab, setActiveTab] = useState<'CHAT' | 'ONLINE'>('CHAT');
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
   // Initialize Firebase Listeners
@@ -165,6 +164,12 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
           setUserProfile(firebaseService.currentProfile);
           setView('HOME');
       }
+  };
+
+  const handleLogout = async () => {
+      await firebaseService.logout();
+      setUserProfile(null);
+      setView('LOGIN');
   };
 
   const handleCreateRoom = async () => {
@@ -265,6 +270,15 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                 <div className="w-10 h-10 rounded-full border-2 border-blue-500 overflow-hidden bg-slate-900">
                     <img src={getAvatarUrl(userProfile?.avatarSeed || 'user')} alt="Me" className="w-full h-full object-cover" />
                 </div>
+                
+                {/* LOGOUT BUTTON */}
+                <button 
+                    onClick={handleLogout}
+                    className="ml-2 p-2 bg-red-900/50 hover:bg-red-800 border border-red-700 rounded-lg text-xs text-red-200 font-bold transition-all shadow-lg flex flex-col items-center justify-center gap-1"
+                    title="Sign Out / Change Account"
+                >
+                    <span className="text-lg leading-none">🚪</span>
+                </button>
             </div>
         </div>
 
