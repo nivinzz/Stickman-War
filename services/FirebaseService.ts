@@ -20,12 +20,22 @@ class FirebaseService {
     // Callbacks
     onRoomUpdate: ((room: LobbyRoom | null) => void) | null = null;
     onGameAction: ((action: GameAction) => void) | null = null;
+    onAuthUpdate: ((user: User | null, profile: PlayerProfile | null) => void) | null = null;
 
     constructor() {
-        onAuthStateChanged(auth, (user) => {
+        onAuthStateChanged(auth, async (user) => {
             this.currentUser = user;
             if (user) {
-                this.loadUserProfile(user);
+                // User detected, load profile
+                await this.loadUserProfile(user);
+            } else {
+                // User logged out
+                this.currentProfile = null;
+            }
+            
+            // Notify listener (UI) that auth state has settled
+            if (this.onAuthUpdate) {
+                this.onAuthUpdate(this.currentUser, this.currentProfile);
             }
         });
     }
@@ -82,6 +92,12 @@ class FirebaseService {
 
             this.currentUser = mockUser;
             await this.loadUserProfile(mockUser);
+            
+            // Notify UI manually since onAuthStateChanged won't trigger for mock user
+            if (this.onAuthUpdate) {
+                this.onAuthUpdate(this.currentUser, this.currentProfile);
+            }
+            
             return mockUser;
         }
     }
@@ -94,6 +110,9 @@ class FirebaseService {
         }
         this.currentUser = null;
         this.currentProfile = null;
+        if (this.onAuthUpdate) {
+            this.onAuthUpdate(null, null);
+        }
     }
 
     async loadUserProfile(user: User): Promise<PlayerProfile> {
@@ -133,6 +152,11 @@ class FirebaseService {
         } catch (err) {
             console.warn("DB Read Permission Denied (Guest Mode?). Using local profile.");
             this.currentProfile = defaultProfile;
+        }
+        
+        // Notify listener
+        if (this.onAuthUpdate) {
+            this.onAuthUpdate(this.currentUser, this.currentProfile);
         }
         
         return this.currentProfile!;

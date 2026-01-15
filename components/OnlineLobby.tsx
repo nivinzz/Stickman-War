@@ -93,11 +93,23 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
 
   // Initialize Firebase Listeners
   useEffect(() => {
-      // 1. Listen for Auth State
+      // 1. Subscribe to Auth State (Fix for Race Condition)
+      // Check immediately
       if (firebaseService.currentProfile) {
           setUserProfile(firebaseService.currentProfile);
           setView('HOME');
       }
+
+      // Register listener for future updates
+      firebaseService.onAuthUpdate = (user, profile) => {
+          if (profile) {
+              setUserProfile(profile);
+              setView('HOME');
+          } else {
+              setUserProfile(null);
+              setView('LOGIN');
+          }
+      };
 
       // 2. Listen for Rooms
       const unsubRooms = firebaseService.listenToRooms((newRooms) => {
@@ -131,6 +143,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
       return () => {
           unsubRooms();
           unsubChat();
+          firebaseService.onAuthUpdate = null; // Cleanup
       };
   }, [userProfile]); // Dependencies
 
@@ -144,13 +157,10 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
       setErrorMsg('');
       try {
           const user = await firebaseService.loginWithGoogle();
-          if (user && firebaseService.currentProfile) {
-              setUserProfile(firebaseService.currentProfile);
-              setView('HOME');
-          }
+          // Profile update handled by subscription
       } catch (e: any) {
           if (e.code === 'auth/unauthorized-domain') {
-              setErrorMsg(`Lỗi Domain! Bạn cần thêm domain hiện tại vào Firebase Console -> Authentication -> Settings -> Authorized Domains.`);
+              setErrorMsg(`Lỗi Domain! Vui lòng dùng "Play as Guest" để vào game ngay.`);
           } else {
               setErrorMsg(`Lỗi đăng nhập: ${e.message}`);
           }
@@ -160,16 +170,12 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
   const handleGuestLogin = async () => {
       setErrorMsg('');
       const user = await firebaseService.loginAsGuest();
-      if (user && firebaseService.currentProfile) {
-          setUserProfile(firebaseService.currentProfile);
-          setView('HOME');
-      }
+      // Profile update handled by subscription
   };
 
   const handleLogout = async () => {
       await firebaseService.logout();
-      setUserProfile(null);
-      setView('LOGIN');
+      // Profile update handled by subscription
   };
 
   const handleCreateRoom = async () => {
@@ -208,7 +214,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
   // --- VIEW: LOGIN ---
   if (view === 'LOGIN') {
       return (
-          <div className="flex flex-col items-center justify-center h-[60vh] animate-fade-in">
+          <div className="flex flex-col items-center justify-center h-[60vh] animate-fade-in relative">
               <h2 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-8">ONLINE ARENA</h2>
               <div className="bg-slate-800 p-8 rounded-xl border border-slate-600 shadow-2xl w-full max-w-md text-center">
                   <div className="text-slate-300 mb-6">Log in to play Online Multiplayer!</div>
@@ -230,9 +236,9 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
 
                       <button 
                         onClick={handleGuestLogin} 
-                        className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded flex items-center justify-center gap-3 transition-all border border-slate-500"
+                        className={`w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded flex items-center justify-center gap-3 transition-all border border-slate-500 ${errorMsg.includes('Domain') ? 'animate-pulse ring-2 ring-yellow-400' : ''}`}
                       >
-                          👤 Play as Guest
+                          👤 Play as Guest (Chơi Ngay)
                       </button>
                   </div>
 
@@ -243,6 +249,11 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                   )}
                   
                   <button onClick={onBack} className="w-full mt-6 text-slate-500 hover:text-slate-300 text-sm underline">Back to Menu</button>
+              </div>
+              
+              {/* Version Tag */}
+              <div className="absolute bottom-[-100px] text-slate-600 font-mono text-xs">
+                  v2.0 (Live Deployment Check)
               </div>
           </div>
       );
@@ -257,6 +268,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
             <div className="flex items-center gap-4">
                 <button onClick={onBack} className="text-slate-400 hover:text-white font-bold text-xl px-2">←</button>
                 <h2 className="text-xl font-black italic text-blue-400">ONLINE ARENA</h2>
+                <span className="text-xs text-slate-600 font-mono border border-slate-700 px-1 rounded">v2.0</span>
             </div>
             
             <div className="flex items-center gap-4">
