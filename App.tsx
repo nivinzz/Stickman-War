@@ -217,11 +217,17 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center p-4 font-sans text-slate-100 select-none overflow-hidden relative">
       
       {gameState === 'MENU' && (
-        <div className="text-center space-y-6 animate-fade-in">
-          <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-500 mb-8">STICKMAN WAR</h1>
+        <div className="text-center space-y-6 animate-fade-in relative z-10">
+          <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-500 mb-2">STICKMAN WAR</h1>
+          
+          {/* VERSION TAG - DEPLOYMENT CHECKER */}
+          <div className="inline-block px-3 py-1 bg-green-500/20 border border-green-500 text-green-300 rounded font-mono text-sm mb-6">
+              VER 2.2 (FIXED BUILD)
+          </div>
+
           <div className="flex flex-col gap-4">
-            <button onClick={() => setGameState('LEVEL_SELECT')} className="px-8 py-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-2xl">CAMPAIGN</button>
-            <button onClick={() => setGameState('ONLINE_LOBBY')} className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xl">🌐 ONLINE PVP</button>
+            <button onClick={() => setGameState('LEVEL_SELECT')} className="px-8 py-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-2xl shadow-lg">CAMPAIGN</button>
+            <button onClick={() => setGameState('ONLINE_LOBBY')} className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xl shadow-lg">🌐 ONLINE PVP</button>
           </div>
         </div>
       )}

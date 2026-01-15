@@ -93,15 +93,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
 
   // Initialize Firebase Listeners
   useEffect(() => {
-      // 1. Subscribe to Auth State (Fix for Race Condition)
-      // Check immediately
-      if (firebaseService.currentProfile) {
-          setUserProfile(firebaseService.currentProfile);
-          setView('HOME');
-      }
-
-      // Register listener for future updates
-      firebaseService.onAuthUpdate = (user, profile) => {
+      // Logic to handle auth updates safely
+      const handleAuthUpdate = (user: any, profile: PlayerProfile | null) => {
           if (profile) {
               setUserProfile(profile);
               setView('HOME');
@@ -111,7 +104,15 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
           }
       };
 
-      // 2. Listen for Rooms
+      // 1. Check current state immediately
+      if (firebaseService.currentProfile) {
+          handleAuthUpdate(firebaseService.currentUser, firebaseService.currentProfile);
+      }
+
+      // 2. Subscribe
+      firebaseService.onAuthUpdate = handleAuthUpdate;
+
+      // 3. Listen for Rooms
       const unsubRooms = firebaseService.listenToRooms((newRooms) => {
           setRooms(newRooms);
           
@@ -119,8 +120,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
           if (firebaseService.currentRoomId) {
               const myRoom = newRooms.find(r => r.id === firebaseService.currentRoomId);
               if (myRoom && myRoom.status === 'PLAYING') {
-                  const opponentName = myRoom.host === userProfile?.name ? myRoom.guestName! : myRoom.host;
-                  const opponentElo = myRoom.host === userProfile?.name ? myRoom.guestElo! : myRoom.hostElo;
+                  const opponentName = myRoom.host === firebaseService.currentProfile?.name ? myRoom.guestName! : myRoom.host;
+                  const opponentElo = myRoom.host === firebaseService.currentProfile?.name ? myRoom.guestElo! : myRoom.hostElo;
                   
                   onStartMatch(
                       opponentName, 
@@ -135,7 +136,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
           }
       });
 
-      // 3. Listen for Chat
+      // 4. Listen for Chat
       const unsubChat = firebaseService.listenToChat((msgs) => {
           setChatHistory(msgs);
       });
@@ -145,7 +146,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
           unsubChat();
           firebaseService.onAuthUpdate = null; // Cleanup
       };
-  }, [userProfile]); // Dependencies
+  }, []); // Run ONCE on mount
 
   useEffect(() => {
       if (chatScrollRef.current) {
@@ -156,8 +157,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
   const handleGoogleLogin = async () => {
       setErrorMsg('');
       try {
-          const user = await firebaseService.loginWithGoogle();
-          // Profile update handled by subscription
+          await firebaseService.loginWithGoogle();
+          // Auth update handled by listener
       } catch (e: any) {
           if (e.code === 'auth/unauthorized-domain') {
               setErrorMsg(`Lỗi Domain! Vui lòng dùng "Play as Guest" để vào game ngay.`);
@@ -169,13 +170,13 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
 
   const handleGuestLogin = async () => {
       setErrorMsg('');
-      const user = await firebaseService.loginAsGuest();
-      // Profile update handled by subscription
+      await firebaseService.loginAsGuest();
+      // Auth update handled by listener
   };
 
   const handleLogout = async () => {
       await firebaseService.logout();
-      // Profile update handled by subscription
+      // Auth update handled by listener
   };
 
   const handleCreateRoom = async () => {
@@ -253,7 +254,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
               
               {/* Version Tag */}
               <div className="absolute bottom-[-100px] text-slate-600 font-mono text-xs">
-                  v2.0 (Live Deployment Check)
+                  v2.2 (Component Check)
               </div>
           </div>
       );
@@ -268,7 +269,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
             <div className="flex items-center gap-4">
                 <button onClick={onBack} className="text-slate-400 hover:text-white font-bold text-xl px-2">←</button>
                 <h2 className="text-xl font-black italic text-blue-400">ONLINE ARENA</h2>
-                <span className="text-xs text-slate-600 font-mono border border-slate-700 px-1 rounded">v2.0</span>
+                <span className="text-xs text-slate-600 font-mono border border-slate-700 px-1 rounded">v2.2</span>
             </div>
             
             <div className="flex items-center gap-4">
