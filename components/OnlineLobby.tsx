@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { PlayerProfile, GameRoom, Language } from '../types';
-import { BOT_NAMES, LEVEL_THEMES } from '../constants';
+import { PlayerProfile, Language, RankTier } from '../types';
+import { generateBotNames, LEVEL_THEMES, getRankTier } from '../constants';
 
 interface OnlineLobbyProps {
   onStartMatch: (opponentName: string, opponentElo: number, mapThemeIndex: number, isSpectator?: boolean) => void;
@@ -9,225 +9,302 @@ interface OnlineLobbyProps {
   lang: Language;
 }
 
-// Helper to get random item (Moved outside to avoid TSX parsing ambiguity)
+// Helper to get random item
 function getRandom<T>(arr: T[]): T {
     return arr[Math.floor(Math.random() * arr.length)];
 }
 
-const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang }) => {
-  const [view, setView] = useState<'LOGIN' | 'LOBBY'>('LOGIN');
-  const [playerName, setPlayerName] = useState('');
-  const [activeTab, setActiveTab] = useState<'ROOMS' | 'RANK'>('ROOMS');
-  const [rooms, setRooms] = useState<GameRoom[]>([]);
-  const [leaderboard, setLeaderboard] = useState<PlayerProfile[]>([]);
-  const [isCreating, setIsCreating] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedMapIndex, setSelectedMapIndex] = useState<number>(-1); // -1 = Random
+const getAdjacentTiers = (current: RankTier): RankTier[] => {
+    const tiers = Object.values(RankTier);
+    const idx = tiers.indexOf(current);
+    const min = Math.max(0, idx - 1);
+    const max = Math.min(tiers.length - 1, idx + 1);
+    return tiers.slice(min, max + 1);
+};
 
-  // Refs for Simulation Loop to access latest state without re-rendering issues
+// --- NEW RANK ICON COMPONENT ---
+const RankIcon: React.FC<{ tier: RankTier, className?: string }> = ({ tier, className }) => {
+    // Define Gradients and Shapes based on Tier
+    const getDefs = () => (
+        <defs>
+            <linearGradient id="gradBronze" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#cd7f32" />
+                <stop offset="50%" stopColor="#8c5a2b" />
+                <stop offset="100%" stopColor="#5c3a1b" />
+            </linearGradient>
+            <linearGradient id="gradSilver" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#f1f5f9" />
+                <stop offset="50%" stopColor="#94a3b8" />
+                <stop offset="100%" stopColor="#475569" />
+            </linearGradient>
+            <linearGradient id="gradGold" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#facc15" />
+                <stop offset="50%" stopColor="#eab308" />
+                <stop offset="100%" stopColor="#854d0e" />
+            </linearGradient>
+            <linearGradient id="gradPlatinum" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#22d3ee" />
+                <stop offset="50%" stopColor="#0891b2" />
+                <stop offset="100%" stopColor="#164e63" />
+            </linearGradient>
+            <linearGradient id="gradDiamond" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#60a5fa" />
+                <stop offset="50%" stopColor="#2563eb" />
+                <stop offset="100%" stopColor="#1e3a8a" />
+            </linearGradient>
+            <linearGradient id="gradChallenger" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#c084fc" />
+                <stop offset="50%" stopColor="#7e22ce" />
+                <stop offset="100%" stopColor="#3b0764" />
+            </linearGradient>
+            <linearGradient id="gradLegend" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#f87171" />
+                <stop offset="50%" stopColor="#dc2626" />
+                <stop offset="100%" stopColor="#7f1d1d" />
+            </linearGradient>
+            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="2" result="blur" />
+                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+        </defs>
+    );
+
+    const renderShape = () => {
+        switch (tier) {
+            case RankTier.BRONZE:
+                return (
+                    <g>
+                        {/* Triangle Shield */}
+                        <path d="M50 10 L90 30 L50 95 L10 30 Z" fill="url(#gradBronze)" stroke="#5c3a1b" strokeWidth="2" />
+                        <path d="M50 20 L80 35 L50 85 L20 35 Z" fill="#ffffff" fillOpacity="0.2" />
+                    </g>
+                );
+            case RankTier.SILVER:
+                return (
+                    <g>
+                        {/* Diamond Shape */}
+                        <path d="M50 5 L95 50 L50 95 L5 50 Z" fill="url(#gradSilver)" stroke="#475569" strokeWidth="2" />
+                        <path d="M50 15 L85 50 L50 85 L15 50 Z" fill="none" stroke="#fff" strokeWidth="1" opacity="0.5" />
+                    </g>
+                );
+            case RankTier.GOLD:
+                return (
+                    <g>
+                        {/* Pentagon Shield */}
+                        <path d="M50 5 L95 35 L80 90 L20 90 L5 35 Z" fill="url(#gradGold)" stroke="#854d0e" strokeWidth="2" />
+                        <path d="M50 20 L80 40 L70 80 L30 80 L20 40 Z" fill="#fff" fillOpacity="0.2" />
+                        <circle cx="50" cy="50" r="10" fill="#fff" fillOpacity="0.4" />
+                    </g>
+                );
+            case RankTier.PLATINUM:
+                return (
+                    <g>
+                        {/* Complex Geometric */}
+                        <path d="M50 5 L85 25 L85 75 L50 95 L15 75 L15 25 Z" fill="url(#gradPlatinum)" stroke="#164e63" strokeWidth="2" />
+                        <path d="M50 5 L85 25 M85 75 L50 95 M15 75 L50 95 M15 75 L15 25 M15 25 L50 5" stroke="#fff" strokeWidth="1" opacity="0.6" />
+                        <path d="M50 25 L70 35 L70 65 L50 75 L30 65 L30 35 Z" fill="#0891b2" stroke="#fff" strokeWidth="1" />
+                    </g>
+                );
+            case RankTier.DIAMOND:
+                return (
+                    <g>
+                        {/* Crystal Shards */}
+                        <path d="M50 0 L80 20 L100 50 L80 80 L50 100 L20 80 L0 50 L20 20 Z" fill="url(#gradDiamond)" stroke="#1e3a8a" strokeWidth="2" />
+                        <circle cx="50" cy="50" r="25" fill="#2563eb" stroke="#93c5fd" strokeWidth="2" />
+                        <path d="M50 25 L75 50 L50 75 L25 50 Z" fill="#93c5fd" />
+                    </g>
+                );
+            case RankTier.CHALLENGER:
+                return (
+                    <g filter="url(#glow)">
+                        {/* Spiked Crest */}
+                        <path d="M50 100 L20 80 L20 30 L50 5 L80 30 L80 80 Z" fill="url(#gradChallenger)" stroke="#3b0764" strokeWidth="3" />
+                        {/* Wings */}
+                        <path d="M15 30 L0 10 L30 20 Z" fill="#a855f7" />
+                        <path d="M85 30 L100 10 L70 20 Z" fill="#a855f7" />
+                        {/* Center Eye */}
+                        <ellipse cx="50" cy="50" rx="15" ry="20" fill="#3b0764" />
+                        <ellipse cx="50" cy="50" rx="8" ry="12" fill="#d8b4fe" />
+                    </g>
+                );
+            case RankTier.LEGEND:
+                return (
+                    <g filter="url(#glow)">
+                        {/* Crown/Legend Shape */}
+                        <path d="M50 95 L20 70 L10 20 L30 40 L50 10 L70 40 L90 20 L80 70 Z" fill="url(#gradLegend)" stroke="#7f1d1d" strokeWidth="2" />
+                        <path d="M50 95 L50 50" stroke="#fca5a5" strokeWidth="2" />
+                        <circle cx="50" cy="35" r="8" fill="#fff" />
+                        <path d="M10 20 L30 40 M90 20 L70 40" stroke="#fca5a5" strokeWidth="2" />
+                    </g>
+                );
+            default:
+                return null;
+        }
+    };
+
+    return (
+        <svg viewBox="0 0 100 100" className={`drop-shadow-lg ${className || 'w-12 h-12'}`}>
+            {getDefs()}
+            {renderShape()}
+        </svg>
+    );
+};
+
+const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang }) => {
+  const [view, setView] = useState<'LOGIN' | 'HOME' | 'CUSTOM_ROOM' | 'RANK_SEARCH'>('LOGIN');
+  const [playerName, setPlayerName] = useState('');
+  const [leaderboard, setLeaderboard] = useState<PlayerProfile[]>([]);
+  const [selectedProfile, setSelectedProfile] = useState<PlayerProfile | null>(null);
+  
+  // Custom Room State
+  const [customMapIndex, setCustomMapIndex] = useState(0);
+  const [customOpponent, setCustomOpponent] = useState<PlayerProfile | null>(null);
+
+  // Ranked Search State
+  const [searchTimer, setSearchTimer] = useState(0);
+  
+  // Refs for Simulation Loop
   const leaderboardRef = useRef<PlayerProfile[]>([]);
-  const roomsRef = useRef<GameRoom[]>([]);
+  const currentPlayerNameRef = useRef<string>('');
 
   // Initialize Data & Ecosystem
   useEffect(() => {
     const savedName = localStorage.getItem('stickman_player_name');
     if (savedName) {
         setPlayerName(savedName);
-        setView('LOBBY');
+        currentPlayerNameRef.current = savedName;
+        setView('HOME');
     }
     
-    // 1. GENERATE 100 BOTS (One time)
+    // 1. GENERATE 600 BOTS
     let fakeLb: PlayerProfile[] = [];
-    const savedLb = localStorage.getItem('stickman_leaderboard_v3');
+    const savedLb = localStorage.getItem('stickman_bots_v4'); 
     
     if (savedLb) {
         fakeLb = JSON.parse(savedLb);
     } else {
-        const shuffledNames = [...BOT_NAMES].sort(() => 0.5 - Math.random());
-        // Ensure 100 bots
-        while (shuffledNames.length < 100) {
-            shuffledNames.push(`${getRandom(BOT_NAMES)}_${Math.floor(Math.random()*999)}`);
-        }
+        const generatedNames = generateBotNames(600);
+        fakeLb = generatedNames.map(name => {
+            // Random Elo distribution
+            const r = Math.random();
+            let baseElo = 0;
+            if (r < 0.4) baseElo = Math.random() * 250; // Bronze
+            else if (r < 0.7) baseElo = 250 + Math.random() * 300; // Silver
+            else if (r < 0.85) baseElo = 550 + Math.random() * 350; // Gold
+            else if (r < 0.95) baseElo = 900 + Math.random() * 400; // Plat
+            else baseElo = 1300 + Math.random() * 1000; // Diamond+
 
-        fakeLb = shuffledNames.slice(0, 100).map(name => {
-            // Skewed distribution: Most around 1000-1500, some pros > 2000
-            const matches = Math.floor(Math.random() * 800) + 50;
-            const winRate = 0.4 + (Math.random() * 0.25); // 40% - 65% base
-            // High Skill Bias
-            const isPro = Math.random() > 0.9;
-            const finalWinRate = isPro ? winRate + 0.15 : winRate;
+            baseElo = Math.floor(baseElo);
             
-            const wins = Math.floor(matches * Math.min(0.9, finalWinRate));
-            const baseElo = 1000;
-            const elo = Math.floor(baseElo + (wins * 25) - ((matches - wins) * 20));
+            // Random Stats
+            const rankMatches = Math.floor(Math.random() * 300) + 10;
+            const rankWinRate = 0.3 + ((baseElo / 2500) * 0.4); 
+            const rankWins = Math.floor(rankMatches * rankWinRate);
+            
+            const casualMatches = Math.floor(Math.random() * 200);
+            const casualWins = Math.floor(casualMatches * (0.4 + Math.random() * 0.2));
+
             return {
                 name,
-                wins,
-                matches,
-                elo: Math.max(500, elo), // Min Elo
+                rankedStats: {
+                    wins: rankWins,
+                    losses: rankMatches - rankWins,
+                    elo: baseElo,
+                    streak: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0
+                },
+                casualStats: {
+                    wins: casualWins,
+                    losses: casualMatches - casualWins
+                },
+                rankTier: getRankTier(baseElo),
                 status: 'IDLE'
             };
         });
-        localStorage.setItem('stickman_leaderboard_v3', JSON.stringify(fakeLb));
+        localStorage.setItem('stickman_bots_v4', JSON.stringify(fakeLb));
     }
-    
+
     setLeaderboard(fakeLb);
     leaderboardRef.current = fakeLb;
 
-    // 2. GENERATE INITIAL ROOMS (25 Rooms)
-    const roomNames = ["Pro Battle", "Vui Vẻ", "Solo Yasuo", "1vs1 Hard", "Noobs Only", "Vietnam #1", "HCM City", "Hanoi Server", "Cafe Gaming", "Thách Đấu", "Rank Cao", "Farm Vàng", "Test Tướng", "Đánh Cho Vui", "Giao Lưu", "Tuyển Ny", "Ai Solo Ko", "Phòng Vip", "Anh Em", "Clan War"];
-    const initRooms: GameRoom[] = [];
-    
-    for(let i=0; i<25; i++) {
-        const isPlaying = Math.random() > 0.4;
-        // Pick a host from bots
-        const potentialHosts = fakeLb.filter(p => p.status === 'IDLE');
-        if (potentialHosts.length === 0) break;
-        const host = getRandom(potentialHosts);
-        host.status = isPlaying ? 'PLAYING' : 'WAITING';
-        
-        let guest: PlayerProfile | undefined;
-        if (isPlaying) {
-            const potentialGuests = fakeLb.filter(p => p.status === 'IDLE');
-            if (potentialGuests.length > 0) {
-                guest = getRandom(potentialGuests);
-                guest.status = 'PLAYING';
-            } else {
-                host.status = 'IDLE'; continue; // Fail to make room
-            }
-        }
-
-        initRooms.push({
-            id: Math.random().toString(36).substr(2, 9),
-            roomIdDisplay: `#${Math.floor(1000 + Math.random() * 9000)}`,
-            name: `${getRandom(roomNames)}`,
-            host: host.name,
-            hostElo: host.elo,
-            guest: guest?.name,
-            guestElo: guest?.elo,
-            status: isPlaying ? 'PLAYING' : 'WAITING',
-            mapThemeIndex: Math.floor(Math.random() * 12),
-            timer: isPlaying ? Math.floor(Math.random() * 10) : 0 // Random progress
-        });
-    }
-    
-    // Sort: Waiting first
-    initRooms.sort((a, b) => (a.status === 'WAITING' ? -1 : 1));
-    setRooms(initRooms);
-    roomsRef.current = initRooms;
-
-    // 3. START SIMULATION LOOP
-    const interval = setInterval(runBotSimulation, 3000); // Every 3s
+    const interval = setInterval(runBotSimulation, 5000); 
     return () => clearInterval(interval);
   }, []);
 
   // --- BOT SIMULATION LOGIC ---
   const runBotSimulation = () => {
       const lb = [...leaderboardRef.current];
-      let currentRooms = [...roomsRef.current];
-      let hasChanges = false;
+      const myName = currentPlayerNameRef.current;
 
-      // A. END MATCHES (Bots finish fighting)
-      // Probability to end match based on duration simulation
-      currentRooms = currentRooms.filter(room => {
-          if (room.status === 'PLAYING') {
-              room.timer = (room.timer || 0) + 1;
-              // Matches last approx 10-30 ticks (30s - 90s in sim time)
-              if (room.timer > 10 && Math.random() > 0.7) {
-                  // MATCH OVER
-                  const host = lb.find(p => p.name === room.host);
-                  const guest = lb.find(p => p.name === room.guest);
-                  
-                  if (host && guest) {
-                      // Determine Winner based on Elo probability
-                      // E_a = 1 / (1 + 10 ^ ((Rb - Ra) / 400))
-                      const expectedHostWin = 1 / (1 + Math.pow(10, (guest.elo - host.elo) / 400));
-                      const hostWon = Math.random() < expectedHostWin;
-                      
-                      if (hostWon) {
-                          host.wins++; host.elo += 25; guest.elo = Math.max(0, guest.elo - 20);
-                      } else {
-                          guest.wins++; guest.elo += 25; host.elo = Math.max(0, host.elo - 20);
-                      }
-                      host.matches++; guest.matches++;
-                      host.status = 'IDLE'; guest.status = 'IDLE';
-                  }
-                  hasChanges = true;
-                  return false; // Remove room
-              }
+      const botIndices = lb
+        .map((p, index) => ({ p, index }))
+        .filter(item => item.p.name !== myName)
+        .map(item => item.index);
+
+      for(let k=0; k<20; k++) {
+          if (botIndices.length < 2) break;
+          const rand1 = Math.floor(Math.random() * botIndices.length);
+          const idx1 = botIndices[rand1];
+          botIndices.splice(rand1, 1);
+
+          const rand2 = Math.floor(Math.random() * botIndices.length);
+          const idx2 = botIndices[rand2];
+          botIndices.splice(rand2, 1);
+
+          const bot1 = lb[idx1];
+          const bot2 = lb[idx2];
+          
+          const isRanked = Math.random() > 0.3; 
+
+          if (isRanked) {
+             const expectedWin1 = 1 / (1 + Math.pow(10, (bot2.rankedStats.elo - bot1.rankedStats.elo) / 400));
+             const bot1Wins = Math.random() < expectedWin1;
+             
+             if (bot1Wins) {
+                 bot1.rankedStats.wins++; bot1.rankedStats.elo += 25; 
+                 bot2.rankedStats.losses++; bot2.rankedStats.elo = Math.max(0, bot2.rankedStats.elo - 20);
+             } else {
+                 bot2.rankedStats.wins++; bot2.rankedStats.elo += 25; 
+                 bot1.rankedStats.losses++; bot1.rankedStats.elo = Math.max(0, bot1.rankedStats.elo - 20);
+             }
+             bot1.rankTier = getRankTier(bot1.rankedStats.elo);
+             bot2.rankTier = getRankTier(bot2.rankedStats.elo);
+          } else {
+             if (Math.random() > 0.5) { bot1.casualStats.wins++; bot2.casualStats.losses++; }
+             else { bot2.casualStats.wins++; bot1.casualStats.losses++; }
           }
-          return true;
-      });
-
-      // B. BOT ACTIONS (Create/Join)
-      const idleBots = lb.filter(p => p.status === 'IDLE');
-      
-      // 1. Join Waiting Rooms
-      const waitingRooms = currentRooms.filter(r => r.status === 'WAITING');
-      waitingRooms.forEach(room => {
-          if (idleBots.length > 0 && Math.random() > 0.6) {
-              const guest = idleBots.pop()!;
-              room.guest = guest.name;
-              room.guestElo = guest.elo;
-              room.status = 'PLAYING';
-              room.timer = 0;
-              guest.status = 'PLAYING';
-              const host = lb.find(p => p.name === room.host);
-              if (host) host.status = 'PLAYING';
-              hasChanges = true;
-          }
-      });
-
-      // 2. Create New Rooms
-      if (idleBots.length > 0 && currentRooms.length < 30 && Math.random() > 0.5) {
-          const host = idleBots.pop()!;
-          const roomNames = ["Giao Luu", "Solo", "1vs1", "Pro", "Test", "Rank", "Vui"];
-          currentRooms.push({
-              id: Math.random().toString(),
-              roomIdDisplay: `#${Math.floor(1000 + Math.random() * 9000)}`,
-              name: `${getRandom(roomNames)}`,
-              host: host.name,
-              hostElo: host.elo,
-              status: 'WAITING',
-              mapThemeIndex: Math.floor(Math.random() * 12),
-              timer: 0
-          });
-          host.status = 'WAITING';
-          hasChanges = true;
       }
-
-      // C. Remove Old Waiting Rooms (Timeout)
-      currentRooms = currentRooms.filter(r => {
-          if (r.status === 'WAITING' && Math.random() > 0.95) {
-              const host = lb.find(p => p.name === r.host);
-              if (host) host.status = 'IDLE';
-              hasChanges = true;
-              return false;
-          }
-          return true;
-      });
-
-      if (hasChanges) {
-          // Sort: Waiting first
-          currentRooms.sort((a, b) => (a.status === 'WAITING' ? -1 : 1));
-          roomsRef.current = currentRooms;
-          setRooms(currentRooms);
-          setLeaderboard(lb); // Update UI stats
-      }
+      leaderboardRef.current = lb;
+      setLeaderboard(lb); 
+      localStorage.setItem('stickman_bots_v4', JSON.stringify(lb));
   };
 
   const handleLogin = () => {
-    if (playerName.trim().length > 0) {
-        localStorage.setItem('stickman_player_name', playerName);
-        setView('LOBBY');
+    let cleanName = playerName.trim();
+    if (cleanName.length > 0) {
+        if (cleanName.includes('@')) {
+            cleanName = cleanName.split('@')[0];
+        }
+        cleanName = cleanName.substring(0, 10);
         
-        // Add player to leaderboard if not exists
+        localStorage.setItem('stickman_player_name', cleanName);
+        setPlayerName(cleanName); 
+        currentPlayerNameRef.current = cleanName;
+        setView('HOME');
+        
         setLeaderboard(prev => {
-            const exists = prev.find(p => p.name === playerName);
+            const exists = prev.find(p => p.name === cleanName);
             if (!exists) {
-                const newProfile: PlayerProfile = { name: playerName, wins: 0, matches: 0, elo: 1000, status: 'IDLE' };
-                leaderboardRef.current.push(newProfile); // Add to ref for sim
-                return [...prev, newProfile];
+                const newProfile: PlayerProfile = { 
+                    name: cleanName, 
+                    rankedStats: { wins: 0, losses: 0, elo: 100, streak: 0 },
+                    casualStats: { wins: 0, losses: 0 },
+                    rankTier: RankTier.BRONZE, 
+                    status: 'IDLE' 
+                };
+                const newLb = [newProfile, ...prev];
+                leaderboardRef.current = newLb;
+                localStorage.setItem('stickman_bots_v4', JSON.stringify(newLb));
+                return newLb;
             }
             return prev;
         });
@@ -235,271 +312,364 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
   };
 
   const handleCreateRoom = () => {
-      setIsCreating(true);
-      // Simulate "Waiting for opponent" - Bot joins after delay
-      setTimeout(() => {
-          setIsCreating(false);
-          // Pick a random bot from leaderboard to challenge user
-          const bot = getRandom(leaderboardRef.current);
-          const map = selectedMapIndex === -1 ? Math.floor(Math.random() * 12) : selectedMapIndex;
-          if (bot) {
-              onStartMatch(bot.name, bot.elo, map, false);
-          }
-      }, 1500 + Math.random() * 2000);
+      setCustomOpponent(null);
+      setCustomMapIndex(0);
+      setView('CUSTOM_ROOM');
   };
 
-  const handleJoinRoom = (room: GameRoom) => {
-      onStartMatch(room.host, room.hostElo, room.mapThemeIndex, false);
+  const handleInviteBot = () => {
+      const bots = leaderboardRef.current.filter(p => p.name !== playerName);
+      const bot = getRandom(bots);
+      setCustomOpponent(bot);
+  };
+  
+  const handleAutoFindCustom = () => {
+      const myProfile = leaderboardRef.current.find(p => p.name === playerName) || { rankedStats: {elo: 100} };
+      const myElo = myProfile.rankedStats?.elo || 100;
+      const candidates = leaderboardRef.current.filter(p => 
+          p.name !== playerName && 
+          Math.abs(p.rankedStats.elo - myElo) < 300
+      );
+      const pool = candidates.length > 0 ? candidates : leaderboardRef.current.filter(p => p.name !== playerName);
+      const bot = getRandom(pool);
+      setCustomOpponent(bot);
   };
 
-  const handleWatchRoom = (room: GameRoom) => {
-      // Spectator Mode
-      // If Waiting, simulate a guest joining
-      const p1 = room.host;
-      const p1Elo = room.hostElo;
-      let p2 = room.guest;
-      let p2Elo = room.guestElo;
-
-      if (!p2) {
-          const bot = getRandom(leaderboardRef.current);
-          if (bot) {
-              p2 = bot.name;
-              p2Elo = bot.elo;
-          }
-      }
-
-      onStartMatch(`${p1} (E:${p1Elo}) vs ${p2} (E:${p2Elo})`, p1Elo, room.mapThemeIndex, true);
-  };
-
-  const filteredRooms = rooms.filter(r => 
-      r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.roomIdDisplay.includes(searchQuery) ||
-      r.host.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const labels = {
-      VN: {
-          title: "ĐẤU TRƯỜNG ONLINE",
-          enterName: "Nhập tên chiến binh:",
-          join: "Vào Ngay",
-          rooms: "Danh Sách Phòng",
-          rank: "Bảng Xếp Hạng",
-          create: "Tạo Phòng",
-          finding: "Đang tìm đối thủ...",
-          back: "Quay Lại",
-          host: "Chủ phòng",
-          status: "Trạng thái",
-          wins: "Thắng",
-          elo: "Điểm Elo",
-          playing: "Đang chơi",
-          waiting: "Chờ...",
-          watch: "Xem",
-          search: "Tìm phòng (ID, Tên)...",
-          map: "Bản đồ",
-          random: "Ngẫu nhiên"
-      },
-      EN: {
-          title: "ONLINE ARENA",
-          enterName: "Enter Warrior Name:",
-          join: "Enter",
-          rooms: "Room List",
-          rank: "Leaderboard",
-          create: "Create Room",
-          finding: "Searching for opponent...",
-          back: "Back",
-          host: "Host",
-          status: "Status",
-          wins: "Wins",
-          elo: "Elo Rating",
-          playing: "Playing",
-          waiting: "Waiting",
-          watch: "Watch",
-          search: "Search room (ID, Name)...",
-          map: "Map",
-          random: "Random"
+  const handleStartCustom = () => {
+      if (customOpponent) {
+          onStartMatch(customOpponent.name, customOpponent.rankedStats.elo, customMapIndex, false);
       }
   };
 
-  const t = labels[lang];
+  const handleFindRanked = () => {
+      setView('RANK_SEARCH');
+      setSearchTimer(0);
+  };
 
-  if (view === 'LOGIN') {
+  useEffect(() => {
+      let interval: number;
+      if (view === 'RANK_SEARCH') {
+          interval = window.setInterval(() => {
+              setSearchTimer(prev => prev + 1);
+              if (searchTimer > 2 && Math.random() > 0.7) {
+                  const myProfile = leaderboardRef.current.find(p => p.name === playerName) || { rankedStats: {elo: 100}, rankTier: RankTier.BRONZE };
+                  const currentTier = myProfile.rankTier || RankTier.BRONZE;
+                  const targetTiers = getAdjacentTiers(currentTier);
+                  
+                  const candidates = leaderboardRef.current.filter(p => 
+                      p.name !== playerName && 
+                      p.rankTier && targetTiers.includes(p.rankTier)
+                  );
+                  
+                  const pool = candidates.length > 0 ? candidates : leaderboardRef.current.filter(p => p.name !== playerName);
+                  
+                  let opponent: PlayerProfile | undefined;
+                  if (pool.length > 0) {
+                      opponent = getRandom<PlayerProfile>(pool);
+                  }
+
+                  if (opponent) {
+                      const randomMap = Math.floor(Math.random() * 12);
+                      onStartMatch(opponent.name, opponent.rankedStats.elo, randomMap, false);
+                      clearInterval(interval);
+                  }
+              }
+          }, 1000);
+      }
+      return () => clearInterval(interval);
+  }, [view, searchTimer, playerName, onStartMatch]);
+
+  const renderRankBadge = (tier?: RankTier, elo?: number) => {
+      if (!tier) tier = RankTier.BRONZE;
       return (
-          <div className="flex flex-col items-center justify-center h-[60vh] animate-fade-in">
-              <h2 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-8">{t.title}</h2>
-              <div className="bg-slate-800 p-8 rounded-xl border border-slate-600 shadow-2xl w-full max-w-md">
-                  <label className="block text-slate-300 mb-2 font-bold">{t.enterName}</label>
-                  <input 
-                    type="text" 
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded mb-6 focus:outline-none focus:border-blue-500 text-lg"
-                    placeholder="Player1..."
-                  />
-                  <div className="flex gap-4">
-                    <button 
-                        onClick={handleLogin}
-                        className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded transition-all"
-                    >
-                        {t.join}
-                    </button>
-                    <button 
-                        onClick={onBack}
-                        className="px-4 border border-slate-600 text-slate-400 hover:text-white rounded"
-                    >
-                        {t.back}
-                    </button>
+          <div className="flex flex-col items-center justify-center relative group">
+              <RankIcon tier={tier} className="w-12 h-12 md:w-14 md:h-14" />
+              {elo !== undefined && (
+                  <span className="text-[10px] text-yellow-500 font-mono mt-[-2px] font-bold z-10 bg-black/50 px-1 rounded backdrop-blur-sm border border-slate-700">
+                      {elo}
+                  </span>
+              )}
+          </div>
+      );
+  };
+
+  const renderDetailModal = () => {
+      if (!selectedProfile) return null;
+      return (
+          <div className="absolute inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setSelectedProfile(null)}>
+              <div className="bg-slate-800 border-2 border-slate-600 p-6 rounded-xl w-full max-w-sm shadow-2xl relative animate-fade-in" onClick={e => e.stopPropagation()}>
+                  <button className="absolute top-2 right-4 text-slate-400 hover:text-white text-xl" onClick={() => setSelectedProfile(null)}>✕</button>
+                  
+                  <div className="flex flex-col items-center mb-6">
+                       <div className="w-20 h-20 bg-slate-700 rounded-full flex items-center justify-center text-4xl border-2 border-blue-500 mb-2 relative overflow-hidden">
+                           <div className="absolute inset-0 bg-gradient-to-br from-slate-600 to-slate-800 opacity-50"></div>
+                           <span className="z-10">👤</span>
+                       </div>
+                       <h3 className="text-2xl font-black text-white tracking-wide uppercase">{selectedProfile.name}</h3>
+                       <div className="text-xs text-slate-400 uppercase tracking-widest font-bold mt-1">Warrior Profile</div>
+                  </div>
+
+                  {/* STATS GRID */}
+                  <div className="space-y-4">
+                      {/* RANKED */}
+                      <div className="bg-slate-900/80 p-4 rounded-lg border border-indigo-500/30 relative overflow-hidden">
+                          <div className="absolute top-0 right-0 p-2 opacity-10 text-6xl">🏆</div>
+                          <div className="flex justify-between items-center mb-3 border-b border-slate-700 pb-2 relative z-10">
+                              <span className="font-bold text-indigo-400 tracking-wider">RANKED SEASON</span>
+                              {renderRankBadge(selectedProfile.rankTier, selectedProfile.rankedStats.elo)}
+                          </div>
+                          <div className="grid grid-cols-2 gap-y-2 text-sm relative z-10">
+                              <div className="text-slate-400">Wins: <span className="text-green-400 font-bold text-lg">{selectedProfile.rankedStats.wins}</span></div>
+                              <div className="text-slate-400">Losses: <span className="text-red-400 font-bold text-lg">{selectedProfile.rankedStats.losses}</span></div>
+                              <div className="text-slate-400">Win Streak: <span className="text-orange-400 font-bold">🔥 {selectedProfile.rankedStats.streak}</span></div>
+                              <div className="text-slate-400">Rating: <span className="text-yellow-400 font-bold">{selectedProfile.rankedStats.elo}</span></div>
+                          </div>
+                      </div>
+
+                      {/* CASUAL */}
+                      <div className="bg-slate-900/80 p-4 rounded-lg border border-slate-600/30 relative overflow-hidden">
+                          <div className="absolute top-0 right-0 p-2 opacity-10 text-6xl">⚔️</div>
+                          <div className="flex justify-between items-center mb-2 border-b border-slate-700 pb-2 relative z-10">
+                              <span className="font-bold text-slate-400 tracking-wider">FRIENDLY MATCHES</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-sm relative z-10">
+                              <div className="text-slate-400">Wins: <span className="text-green-400 font-bold">{selectedProfile.casualStats.wins}</span></div>
+                              <div className="text-slate-400">Losses: <span className="text-red-400 font-bold">{selectedProfile.casualStats.losses}</span></div>
+                          </div>
+                      </div>
                   </div>
               </div>
           </div>
       );
   }
 
+  if (view === 'LOGIN') {
+      return (
+          <div className="flex flex-col items-center justify-center h-[60vh] animate-fade-in">
+              <h2 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-8">ONLINE ARENA</h2>
+              <div className="bg-slate-800 p-8 rounded-xl border border-slate-600 shadow-2xl w-full max-w-md">
+                  <label className="block text-slate-300 mb-2 font-bold">Warrior Name (or Email):</label>
+                  <input 
+                    type="text" 
+                    value={playerName}
+                    onChange={(e) => setPlayerName(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded mb-6 focus:outline-none focus:border-blue-500 text-lg"
+                    placeholder="e.g. name@email.com"
+                  />
+                  <div className="flex gap-4">
+                    <button 
+                        onClick={handleLogin}
+                        className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded transition-all"
+                    >
+                        Join Arena
+                    </button>
+                    <button 
+                        onClick={onBack}
+                        className="px-4 border border-slate-600 text-slate-400 hover:text-white rounded"
+                    >
+                        Back
+                    </button>
+                  </div>
+                  <p className="text-slate-500 text-xs mt-4 text-center">
+                      * Nhập email sẽ tự động lấy 10 ký tự đầu làm tên (Ví dụ: abc@gmail.com -&gt; abc)
+                  </p>
+              </div>
+          </div>
+      );
+  }
+
+  const myProfile = leaderboard.find(p => p.name === playerName);
+
   return (
-    <div className="w-full max-w-5xl h-[80vh] flex flex-col animate-fade-in">
-        <div className="flex justify-between items-center mb-6">
-            <h2 className="text-3xl font-black text-blue-400 italic">{t.title}</h2>
+    <div className="w-full max-w-6xl h-[85vh] flex flex-col animate-fade-in bg-slate-900 rounded-lg shadow-2xl overflow-hidden border border-slate-700 relative">
+        {renderDetailModal()}
+
+        {/* HEADER */}
+        <div className="bg-slate-800 p-4 border-b border-slate-600 flex justify-between items-center shadow-md z-10">
             <div className="flex items-center gap-4">
-                <span className="text-slate-300 font-bold">👤 {playerName}</span>
-                <button onClick={onBack} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 text-sm border border-slate-600">
-                    {t.back}
-                </button>
+                <button onClick={onBack} className="text-slate-400 hover:text-white font-bold text-xl">←</button>
+                <h2 className="text-2xl font-black italic text-blue-400">ONLINE ARENA</h2>
+            </div>
+            
+            <div className="flex items-center gap-6 bg-slate-900 px-4 py-1 rounded-lg border border-slate-700 cursor-pointer hover:bg-slate-800 transition-colors" onClick={() => myProfile && setSelectedProfile(myProfile)}>
+                <div className="flex flex-col items-end">
+                    <span className="font-bold text-white text-lg">{playerName}</span>
+                    <span className="text-[10px] text-slate-400">Click for Stats</span>
+                </div>
+                {myProfile && renderRankBadge(myProfile.rankTier, myProfile.rankedStats.elo)}
             </div>
         </div>
 
-        <div className="flex gap-4 mb-4">
-            <button 
-                onClick={() => setActiveTab('ROOMS')}
-                className={`flex-1 py-3 font-bold rounded-t-lg transition-colors ${activeTab === 'ROOMS' ? 'bg-slate-700 text-white border-t-2 border-blue-500' : 'bg-slate-800 text-slate-500 hover:bg-slate-700'}`}
-            >
-                {t.rooms}
-            </button>
-            <button 
-                onClick={() => setActiveTab('RANK')}
-                className={`flex-1 py-3 font-bold rounded-t-lg transition-colors ${activeTab === 'RANK' ? 'bg-slate-700 text-white border-t-2 border-yellow-500' : 'bg-slate-800 text-slate-500 hover:bg-slate-700'}`}
-            >
-                {t.rank}
-            </button>
-        </div>
+        {/* MAIN CONTENT AREA */}
+        <div className="flex flex-1 overflow-hidden relative">
+            
+            {/* LEFT: MODE SELECTION (Visible in HOME) */}
+            {view === 'HOME' && (
+                <div className="flex-1 p-8 flex flex-col justify-center items-center gap-6 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-repeat">
+                     {/* RANKED BUTTON */}
+                     <button 
+                        onClick={handleFindRanked}
+                        className="group w-full max-w-md h-32 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl shadow-lg border border-indigo-400 flex items-center justify-between px-8 hover:scale-105 transition-all relative overflow-hidden"
+                     >
+                         <div className="z-10 text-left">
+                             <div className="text-3xl font-black text-white italic">RANKED MATCH</div>
+                             <div className="text-indigo-200">Play for Elo & Rank.</div>
+                         </div>
+                         <div className="z-10 transform group-hover:scale-110 transition-transform duration-300">
+                             <RankIcon tier={myProfile?.rankTier || RankTier.BRONZE} className="w-16 h-16" />
+                         </div>
+                         <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                     </button>
 
-        <div className="bg-slate-700 flex-1 rounded-b-lg rounded-tr-lg p-4 overflow-hidden shadow-xl border border-slate-600 relative">
-            {activeTab === 'ROOMS' && (
-                <div className="flex flex-col h-full">
-                    {/* Search Bar */}
-                    <div className="mb-4">
-                        <input 
-                            type="text" 
-                            value={searchQuery} 
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder={t.search}
-                            className="w-full bg-slate-800 border border-slate-600 text-white px-4 py-2 rounded focus:outline-none focus:border-blue-500"
-                        />
+                     {/* FRIENDLY BUTTON */}
+                     <button 
+                        onClick={handleCreateRoom}
+                        className="group w-full max-w-md h-24 bg-slate-700 hover:bg-slate-600 rounded-xl shadow-lg border border-slate-500 flex items-center justify-between px-8 transition-all"
+                     >
+                         <div className="text-left">
+                             <div className="text-2xl font-bold text-white">FRIENDLY / CUSTOM</div>
+                             <div className="text-slate-400 text-sm">No Elo loss. Practice.</div>
+                         </div>
+                         <div className="text-4xl group-hover:rotate-12 transition-transform">⚔️</div>
+                     </button>
+                </div>
+            )}
+
+            {/* CUSTOM ROOM VIEW */}
+            {view === 'CUSTOM_ROOM' && (
+                <div className="flex-1 flex flex-col p-8 bg-slate-900/50">
+                    <div className="flex-1 flex items-center justify-center gap-8">
+                         {/* PLAYER CARD */}
+                         <div className="w-64 h-80 bg-slate-800 border-2 border-blue-500 rounded-xl flex flex-col items-center justify-center gap-4 shadow-blue-900/20 shadow-xl">
+                             <div className="text-6xl">👤</div>
+                             <div className="text-xl font-bold text-white">{playerName}</div>
+                             {myProfile && renderRankBadge(myProfile.rankTier, myProfile.rankedStats.elo)}
+                             <div className="mt-4 text-green-400 font-bold px-3 py-1 bg-green-900/30 rounded">READY</div>
+                         </div>
+
+                         <div className="text-4xl font-black text-red-500 italic">VS</div>
+
+                         {/* OPPONENT CARD */}
+                         <div className="w-64 h-80 bg-slate-800 border-2 border-dashed border-slate-600 rounded-xl flex flex-col items-center justify-center gap-4 relative">
+                             {customOpponent ? (
+                                 <>
+                                     <div className="absolute top-2 right-2 cursor-pointer text-slate-500 hover:text-red-500" onClick={() => setCustomOpponent(null)}>✕</div>
+                                     <div className="text-6xl">🤖</div>
+                                     <div className="text-xl font-bold text-white">{customOpponent.name}</div>
+                                     {renderRankBadge(customOpponent.rankTier, customOpponent.rankedStats.elo)}
+                                     <div className="mt-4 text-green-400 font-bold px-3 py-1 bg-green-900/30 rounded">READY</div>
+                                 </>
+                             ) : (
+                                 <>
+                                    <button onClick={handleInviteBot} className="w-16 h-16 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-3xl mb-2 text-slate-300">+</button>
+                                    <div className="text-slate-500 font-bold">Invite Opponent</div>
+                                    <button onClick={handleAutoFindCustom} className="mt-4 text-xs text-blue-400 hover:underline">Auto Find Bot</button>
+                                 </>
+                             )}
+                         </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
-                        {filteredRooms.map(room => (
-                            <div key={room.id} className="bg-slate-800 p-3 rounded flex justify-between items-center hover:bg-slate-750 border border-slate-700">
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="bg-slate-900 text-slate-400 text-xs px-1 rounded font-mono">{room.roomIdDisplay}</span>
-                                        <div className="font-bold text-lg text-white">{room.name}</div>
-                                        <span className="text-[10px] bg-indigo-900 text-indigo-300 px-2 rounded border border-indigo-700">
-                                            {lang === 'VN' ? LEVEL_THEMES[room.mapThemeIndex].nameVn : LEVEL_THEMES[room.mapThemeIndex].nameEn}
-                                        </span>
-                                    </div>
-                                    <div className="text-xs text-slate-400 mt-1 flex gap-4">
-                                        <span>{t.host}: <span className="text-blue-300 font-bold">{room.host}</span> <span className="text-yellow-500">({room.hostElo})</span></span>
-                                        {room.status === 'PLAYING' && (
-                                            <span>VS <span className="text-red-300 font-bold">{room.guest}</span> <span className="text-yellow-500">({room.guestElo})</span></span>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <span className={`text-xs font-bold px-2 py-1 rounded ${room.status === 'WAITING' ? 'bg-green-900 text-green-400' : 'bg-red-900 text-red-400'}`}>
-                                        {room.status === 'WAITING' ? t.waiting : t.playing}
-                                    </span>
-                                    {room.status === 'WAITING' ? (
-                                        <button 
-                                            onClick={() => handleJoinRoom(room)}
-                                            className="px-6 py-2 rounded font-bold bg-blue-600 hover:bg-blue-500 text-white"
-                                        >
-                                            VS
-                                        </button>
-                                    ) : (
-                                        <button 
-                                            onClick={() => handleWatchRoom(room)}
-                                            className="px-6 py-2 rounded font-bold bg-purple-600 hover:bg-purple-500 text-white flex items-center gap-1"
-                                        >
-                                            👁️ {t.watch}
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                        {filteredRooms.length === 0 && <div className="text-center text-slate-500 italic py-4">No rooms found.</div>}
+                    {/* BOTTOM CONTROLS */}
+                    <div className="h-24 bg-slate-800 rounded-lg p-4 flex items-center justify-between border-t border-slate-600">
+                         <div className="flex items-center gap-2">
+                             <span className="font-bold text-slate-400">MAP:</span>
+                             <select 
+                                value={customMapIndex}
+                                onChange={(e) => setCustomMapIndex(parseInt(e.target.value))}
+                                className="bg-slate-900 text-white p-2 rounded border border-slate-600 outline-none w-48"
+                             >
+                                 {LEVEL_THEMES.map((t, i) => (
+                                     <option key={i} value={i}>{lang === 'VN' ? t.nameVn : t.nameEn}</option>
+                                 ))}
+                             </select>
+                         </div>
+
+                         <div className="flex gap-4">
+                             <button onClick={() => setView('HOME')} className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded">Exit Room</button>
+                             <button 
+                                onClick={handleStartCustom}
+                                disabled={!customOpponent}
+                                className={`px-8 py-3 font-bold rounded text-xl shadow-lg transition-all ${customOpponent ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-slate-700 text-slate-500 cursor-not-allowed'}`}
+                             >
+                                 START GAME
+                             </button>
+                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* RANK SEARCH VIEW */}
+            {view === 'RANK_SEARCH' && (
+                <div className="flex-1 flex flex-col items-center justify-center bg-slate-900 relative">
+                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes.png')] opacity-10 animate-slide"></div>
                     
-                    {/* Create Room Section */}
-                    <div className="pt-4 border-t border-slate-600 mt-2 flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-slate-300">{t.map}:</span>
-                            <select 
-                                value={selectedMapIndex}
-                                onChange={(e) => setSelectedMapIndex(parseInt(e.target.value))}
-                                className="bg-slate-800 border border-slate-600 text-white text-sm rounded px-2 py-1 flex-1 outline-none"
-                            >
-                                <option value={-1}>{t.random}</option>
-                                {LEVEL_THEMES.slice(0, 12).map((theme, idx) => (
-                                    <option key={idx} value={idx}>{lang === 'VN' ? theme.nameVn : theme.nameEn}</option>
-                                ))}
-                            </select>
+                    <div className="z-10 flex flex-col items-center">
+                        <div className="w-32 h-32 rounded-full border-4 border-slate-700 flex items-center justify-center animate-spin-slow relative mb-8">
+                             <div className="absolute inset-0 border-t-4 border-blue-500 rounded-full animate-spin"></div>
+                             <RankIcon tier={myProfile?.rankTier || RankTier.BRONZE} className="w-16 h-16 animate-pulse" />
                         </div>
-                        <button 
-                            onClick={handleCreateRoom}
-                            disabled={isCreating}
-                            className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-bold text-xl rounded shadow-lg flex items-center justify-center gap-2"
-                        >
-                            {isCreating ? (
-                                <span className="animate-pulse">{t.finding}</span>
-                            ) : (
-                                <><span>+</span> {t.create}</>
-                            )}
+                        <h2 className="text-3xl font-black text-white mb-2">SEARCHING...</h2>
+                        <div className="text-slate-400 font-mono text-xl">{searchTimer}s</div>
+                        <div className="mt-4 px-4 py-2 bg-slate-800 rounded border border-slate-600 text-sm text-slate-300">
+                            Looking for players near <span className="text-yellow-400 font-bold">{myProfile?.rankedStats.elo || 100} Elo</span>...
+                        </div>
+                        
+                        <button onClick={() => setView('HOME')} className="mt-12 px-6 py-2 border border-red-500 text-red-500 hover:bg-red-900/30 rounded">
+                            Cancel
                         </button>
                     </div>
                 </div>
             )}
 
-            {activeTab === 'RANK' && (
-                <div className="overflow-y-auto custom-scrollbar h-full">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="text-slate-400 border-b border-slate-600">
-                                <th className="p-3">#</th>
-                                <th className="p-3">{t.host}</th>
-                                <th className="p-3 text-right">{t.wins}</th>
-                                <th className="p-3 text-right">{t.elo}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {leaderboard
-                                .sort((a,b) => b.elo - a.elo)
-                                .map((p, idx) => (
-                                <tr key={idx} className={`border-b border-slate-600/50 ${p.name === playerName ? 'bg-blue-900/30' : ''}`}>
-                                    <td className="p-3 font-mono text-slate-500">
-                                        {idx + 1 === 1 ? '🥇' : idx + 1 === 2 ? '🥈' : idx + 1 === 3 ? '🥉' : idx + 1}
-                                    </td>
-                                    <td className="p-3 font-bold text-white flex items-center gap-2">
-                                        {p.name}
-                                        {p.status === 'PLAYING' && <span className="text-[8px] bg-red-600 px-1 rounded">PLAYING</span>}
-                                        {p.status === 'WAITING' && <span className="text-[8px] bg-green-600 px-1 rounded">WAITING</span>}
-                                    </td>
-                                    <td className="p-3 text-right text-green-400 font-mono">{p.wins}</td>
-                                    <td className="p-3 text-right text-yellow-400 font-mono font-bold">{p.elo}</td>
+            {/* RIGHT: LEADERBOARD (Always visible in HOME & CUSTOM) */}
+            {view !== 'RANK_SEARCH' && (
+                <div className="w-80 bg-slate-800 border-l border-slate-700 flex flex-col">
+                    <div className="p-3 bg-slate-900 border-b border-slate-700 font-bold text-yellow-400 text-center uppercase tracking-widest">
+                        Leaderboard
+                    </div>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar">
+                         <table className="w-full text-left border-collapse text-sm">
+                            <thead className="bg-slate-800 sticky top-0 z-10">
+                                <tr className="text-slate-500 text-xs uppercase shadow-sm">
+                                    <th className="p-2">#</th>
+                                    <th className="p-2">Name</th>
+                                    <th className="p-2 text-right">Rank</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {leaderboard
+                                    .sort((a,b) => b.rankedStats.elo - a.rankedStats.elo)
+                                    .slice(0, 50) // Show top 50
+                                    .map((p, idx) => (
+                                    <tr 
+                                        key={idx} 
+                                        onClick={() => setSelectedProfile(p)}
+                                        className={`border-b border-slate-700/50 cursor-pointer transition-colors ${p.name === playerName ? 'bg-blue-900/40' : 'hover:bg-slate-700/30'}`}
+                                    >
+                                        <td className="p-2 font-mono text-slate-500 w-8 text-center">
+                                            {idx < 3 ? ['🥇','🥈','🥉'][idx] : idx + 1}
+                                        </td>
+                                        <td className="p-2 text-white overflow-hidden text-ellipsis whitespace-nowrap max-w-[120px]">
+                                            <div className="font-bold">{p.name}</div>
+                                            <div className="text-[10px] text-slate-400">{p.rankTier}</div>
+                                        </td>
+                                        <td className="p-2 text-right">
+                                            <div className="flex justify-end">
+                                                {renderRankBadge(p.rankTier, p.rankedStats.elo)}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    {/* Passive Update Info */}
+                    <div className="p-2 text-[10px] text-slate-500 text-center bg-slate-900">
+                        Top 50 Ranking (Elo based)
+                    </div>
                 </div>
             )}
+
         </div>
     </div>
   );

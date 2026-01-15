@@ -1,6 +1,6 @@
 
 import { Unit, UnitType, Faction, UnitState, Projectile, Particle, GameLevel, UpgradeState, SpawnQueueItem, EnvElement, Firework, Hazard, IceShard } from '../types';
-import { CANVAS_WIDTH, WORLD_WIDTH, GROUND_Y, PLAYER_BASE_X, ENEMY_BASE_X, UNIT_CONFIG, MINING_TIME, MINING_DISTANCE, GOLD_PER_TRIP, BASE_HP, GRAVITY, MAX_POPULATION, MAX_HEROES, SKILL_COOLDOWNS_FRAMES, INITIAL_GOLD, MAX_PASSIVE_GOLD_LEVEL, POP_UPGRADE_COST, MAX_POP_UPGRADES, FOG_OF_WAR_RANGE, REWARD_MELEE, REWARD_ARCHER, REWARD_HERO, MAX_UPGRADE_LEVELS, MAX_TOWERS, TOWER_COST_BASE, TOWER_COST_INC, TOWER_RANGE, TOWER_DAMAGE_BASE, TOWER_COOLDOWN, calculateUnitStats } from '../constants';
+import { CANVAS_WIDTH, WORLD_WIDTH, GROUND_Y, PLAYER_BASE_X, ENEMY_BASE_X, UNIT_CONFIG, MINING_TIME, MINING_DISTANCE, GOLD_PER_TRIP, BASE_HP, GRAVITY, MAX_POPULATION, MAX_HEROES, SKILL_COOLDOWNS_FRAMES, INITIAL_GOLD, MAX_PASSIVE_GOLD_LEVEL, POP_UPGRADE_COST, MAX_POP_UPGRADES, FOG_OF_WAR_RANGE, REWARD_MELEE, REWARD_ARCHER, REWARD_HERO, MAX_UPGRADE_LEVELS, MAX_TOWERS, TOWER_COST_BASE, TOWER_COST_INC, TOWER_RANGE, TOWER_DAMAGE_BASE, TOWER_COOLDOWN, calculateUnitStats, getRankTier, TIER_DIFFICULTY_MAP, RANK_THRESHOLDS } from '../constants';
 import { soundManager } from './SoundManager';
 
 export class GameEngine {
@@ -79,41 +79,66 @@ export class GameEngine {
     
     // --- DIFFICULTY & ONLINE SCALING ---
     if (level.isMultiplayer) {
-        // ONLINE: Fair Start
-        this.playerMaxBaseHp = BASE_HP; // Reset player HP bonus
+        // ONLINE: ELO BASED SCALING
+        this.playerMaxBaseHp = BASE_HP; // Reset player HP bonus for fair play base (upgrades handled in App)
         this.playerBaseHp = BASE_HP;
         this.enemyMaxBaseHp = BASE_HP;
         this.enemyBaseHp = BASE_HP;
-        this.enemyGold = INITIAL_GOLD;
-        this.enemyTowers = 0;
         
-        // AI SCALE BY ELO
-        // Base Elo ~1000. Max ~2500.
         const elo = level.opponentElo || 1000;
-        const scale = Math.max(0, (elo - 800) / 100); // 1000 -> 2, 2000 -> 12
+        const tier = getRankTier(elo);
+        const mapping = TIER_DIFFICULTY_MAP[tier];
         
-        const tier = Math.floor(scale);
+        // Calculate where in the tier range this Elo sits (0.0 to 1.0)
+        let tierRange = 1000; 
+        let baseTierElo = 0;
+        switch(tier) {
+            case 'BRONZE': baseTierElo = 0; break;
+            case 'SILVER': baseTierElo = 1000; break;
+            case 'GOLD': baseTierElo = 2000; break;
+            case 'PLATINUM': baseTierElo = 3000; break;
+            case 'DIAMOND': baseTierElo = 4000; break;
+            case 'CHALLENGER': baseTierElo = 5000; break;
+            case 'LEGEND': baseTierElo = 6000; tierRange = 2000; break; 
+        }
         
+        const progress = Math.min(1, Math.max(0, (elo - baseTierElo) / tierRange));
+        
+        // Calculate effective "Offline Level" equivalent
+        const levelRange = mapping.maxLvl - mapping.minLvl;
+        const effectiveLevel = Math.floor(mapping.minLvl + (levelRange * progress));
+        
+        // Give higher Elo bots a gold advantage instead of just stats
+        this.enemyGold = INITIAL_GOLD + Math.floor(elo / 10); 
+        
+        this.enemyTowers = 0;
+        if (effectiveLevel >= 10) this.enemyTowers = 1;
+        if (effectiveLevel >= 25) this.enemyTowers = 2;
+        if (effectiveLevel >= 45) this.enemyTowers = 3;
+
+        // Base upgrades on effective level
+        const baseAILevel = Math.max(0, Math.floor((effectiveLevel - 3) * 0.5)); 
+        const bonusDmg = Math.max(0, Math.floor((effectiveLevel - 5) / 4));
+
         this.enemyUpgrades = {
-            baseHp: 0, 
-            swordDamage: tier, 
-            archerDamage: tier, 
-            cavalryDamage: tier, 
-            spawnSpeed: Math.floor(tier * 0.5),
-            arrowRainPower: Math.floor(tier * 0.3), 
-            lightningPower: Math.floor(tier * 0.3), 
-            freezePower: Math.floor(tier * 0.3), 
-            heroPower: Math.floor(tier * 0.5),
-            minerSpeed: Math.floor(tier * 0.8), 
-            maxPopUpgrade: 0, 
-            passiveGold: 0, 
-            towerPower: Math.floor(tier * 0.5)
+            baseHp: Math.floor(baseAILevel * 0.5), 
+            swordDamage: baseAILevel + bonusDmg, 
+            archerDamage: baseAILevel + bonusDmg, 
+            cavalryDamage: baseAILevel + bonusDmg, 
+            spawnSpeed: Math.floor(baseAILevel * 0.8),
+            arrowRainPower: Math.floor(baseAILevel * 0.5), 
+            lightningPower: Math.floor(baseAILevel * 0.5), 
+            freezePower: Math.floor(baseAILevel * 0.5), 
+            heroPower: Math.floor(baseAILevel * 0.5),
+            minerSpeed: Math.floor(baseAILevel * 0.8), 
+            maxPopUpgrade: Math.floor(effectiveLevel / 10), 
+            passiveGold: Math.floor(effectiveLevel / 15), 
+            towerPower: Math.floor(baseAILevel * 0.5)
         };
 
         // If Spectator, Player side is ALSO AI (Simulated)
-        // Reset player upgrades to base for fairness unless we track P1 upgrades
         if (level.isSpectator) {
-            this.upgrades = { ...this.enemyUpgrades }; // Assume similar skill for basic spectator logic
+            this.upgrades = { ...this.enemyUpgrades }; 
         }
     } else {
         // OFFLINE: Campaign Scaling
@@ -567,7 +592,8 @@ export class GameEngine {
           faction: faction,
           active: true,
           type: 'ARROW',
-          rotation: Math.PI / 2
+          rotation: Math.PI / 2,
+          fromSkill: true // Flag to identify skill origin
         });
       }, i * (3000 * durationMultiplier / arrowCount)); 
     }
@@ -1247,7 +1273,8 @@ export class GameEngine {
                const isPlayerShot = p.faction === Faction.PLAYER;
                const targetBaseX = isPlayerShot ? ENEMY_BASE_X : PLAYER_BASE_X;
                
-               if (Math.abs(p.x - targetBaseX) < 120 && p.y > (GROUND_Y - 250) && p.y < GROUND_Y) {
+               // Logic Update: If arrow is from Skill, it ignores Castle collision
+               if (!p.fromSkill && Math.abs(p.x - targetBaseX) < 120 && p.y > (GROUND_Y - 250) && p.y < GROUND_Y) {
                    if (isPlayerShot) {
                        this.enemyBaseHp -= p.damage;
                    } else {

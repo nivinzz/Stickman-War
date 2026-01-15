@@ -1,5 +1,5 @@
 
-import { UnitType, UnitStats, LevelTheme, Language, UpgradeState } from './types';
+import { UnitType, UnitStats, LevelTheme, Language, UpgradeState, RankTier } from './types';
 
 // Widescreen & Expanded World
 export const CANVAS_WIDTH = 1600; // Wider view
@@ -55,11 +55,6 @@ export const UNIT_CONFIG: Record<UnitType, UnitStats> = {
 };
 
 // Max Levels for Upgrade Menu (Aligned with new Gating System)
-// Units: Max 90
-// Tower: Max 40
-// Skills: Max 40
-// Hero: Max 30
-// Others: Max 20
 export const MAX_UPGRADE_LEVELS: Partial<Record<keyof UpgradeState, number>> = {
     baseHp: 20,
     towerPower: 40, // Decreased to 40
@@ -83,6 +78,39 @@ export const SKILL_COOLDOWNS_FRAMES = {
 export const MINING_TIME = 60; 
 export const GOLD_PER_TRIP = 25;
 export const INITIAL_GOLD = 200; 
+
+// --- RANK SYSTEM (RESCALED) ---
+// Base Win = 25 Elo.
+export const RANK_THRESHOLDS = {
+    BRONZE: 0,
+    SILVER: 250,    // ~10 Net Wins
+    GOLD: 550,      // ~12 Net Wins from Silver (300 gap)
+    PLATINUM: 900,  // ~14 Net Wins from Gold (350 gap)
+    DIAMOND: 1300,  // ~16 Net Wins from Plat (400 gap)
+    CHALLENGER: 1750, // ~18 Net Wins from Diamond (450 gap)
+    LEGEND: 2250    // ~20 Net Wins from Challenger (500 gap)
+};
+
+export const getRankTier = (elo: number): RankTier => {
+    if (elo >= RANK_THRESHOLDS.LEGEND) return RankTier.LEGEND;
+    if (elo >= RANK_THRESHOLDS.CHALLENGER) return RankTier.CHALLENGER;
+    if (elo >= RANK_THRESHOLDS.DIAMOND) return RankTier.DIAMOND;
+    if (elo >= RANK_THRESHOLDS.PLATINUM) return RankTier.PLATINUM;
+    if (elo >= RANK_THRESHOLDS.GOLD) return RankTier.GOLD;
+    if (elo >= RANK_THRESHOLDS.SILVER) return RankTier.SILVER;
+    return RankTier.BRONZE;
+};
+
+// Maps Tier to an equivalent "Offline Level" difficulty
+export const TIER_DIFFICULTY_MAP: Record<RankTier, { minLvl: number, maxLvl: number }> = {
+    [RankTier.BRONZE]: { minLvl: 1, maxLvl: 5 },
+    [RankTier.SILVER]: { minLvl: 6, maxLvl: 10 },
+    [RankTier.GOLD]: { minLvl: 11, maxLvl: 20 },
+    [RankTier.PLATINUM]: { minLvl: 21, maxLvl: 30 },
+    [RankTier.DIAMOND]: { minLvl: 31, maxLvl: 45 },
+    [RankTier.CHALLENGER]: { minLvl: 46, maxLvl: 55 },
+    [RankTier.LEGEND]: { minLvl: 56, maxLvl: 60 },
+};
 
 // --- STAT CALCULATION HELPER ---
 export const calculateUnitStats = (type: UnitType, upgradeLevel: number): UnitStats => {
@@ -115,7 +143,6 @@ export const calculateUnitStats = (type: UnitType, upgradeLevel: number): UnitSt
 };
 
 // Loop themes for 60 levels
-// treeTrunk, treeLeaf1, treeLeaf2 allow for varied environments
 export const LEVEL_THEMES: LevelTheme[] = [
   // 1-5: Classic Green
   { skyTop: '#38bdf8', skyBottom: '#bae6fd', mountainColor: '#64748b', groundColor: '#166534', treeTrunk: '#451a03', treeLeaf1: '#166534', treeLeaf2: '#15803d', nameEn: "Green Valley", nameVn: "Thung Lũng Xanh" },
@@ -147,29 +174,33 @@ export const getTheme = (level: number): LevelTheme => {
   return LEVEL_THEMES[(level - 1) % LEVEL_THEMES.length];
 };
 
-// BOT NAMES FOR ONLINE LOBBY
-export const BOT_NAMES = [
-    // Vietnamese Names
-    "Hùng Dragon", "Bé Na 2k5", "Tuấn Hưng", "Quang Hải Pro", "Linh Ka", 
-    "Sát Thủ Bóng Đêm", "Hắc Bạch Vô Thường", "Thánh Gióng", "Sơn Tùng MTP", "Ba Gà",
-    "Cô Giáo Thảo", "Chí Phèo", "Lão Hạc", "Cậu Vàng", "Đại Ca Lớp 5A",
-    "Nguyễn Văn A", "Trần Dần", "Khá Bảnh", "Huấn Hoa Hồng", "Tiến Bịp",
-    "Mèo Simmy", "Độ Mixi", "Bomman", "SofM", "Optimus", "Văn Toàn", "Công Phượng",
-    "Thầy Ba", "Zeros", "Stark", "Levi", "Dia1", "Artifact", "Palette",
-    "BigKoro", "Slay", "RonOP", "YiJin", "Warzone", "Naul",
+// INTERNATIONAL BOT NAMES
+const NAMES_VN = ["Hùng Dragon", "Bé Na 2k5", "Tuấn Hưng", "Quang Hải", "Sát Thủ Bóng Đêm", "Hắc Bạch", "Thánh Gióng", "Sơn Tùng", "Ba Gà", "Cô Giáo Thảo", "Chí Phèo", "Lão Hạc", "Cậu Vàng", "Văn A", "Trần Dần", "Khá Bảnh", "Tiến Bịp"];
+const NAMES_EN = ["ShadowSlayer", "DragonBorn", "NoobMaster69", "ProGamer", "SniperWolf", "IronFist", "DarkKnight", "StormBreaker", "GhostRider", "Viper", "Zeus", "Thor", "Loki", "Kratos", "Maverick", "Iceman", "Goose"];
+const NAMES_KR = ["Faker", "ShowMaker", "Chovy", "Deft", "Ruler", "Peanut", "Canyon", "Gumayusi", "Keria", "ZeusKR", "Oner", "BeryL", "Pyosik", "Zeka", "Kingen", "Aiming", "Lehends"];
+const NAMES_JP = ["Naruto", "Sasuke", "Goku", "Luffy", "Zoro", "Sanji", "Nami", "Robin", "Chopper", "Usopp", "Franky", "Brook", "Jinbe", "Tanjiro", "Nezuko", "Zenitsu", "Inosuke"];
+const NAMES_CN = ["Uzi", "TheShy", "Rookie", "Doinb", "Tian", "JackeyLove", "Ming", "Xiaohu", "Wei", "Gala", "Crisp", "Meiko", "Scout", "ViperCN", "Flandre", "Jiejie", "Knight"];
+const NAMES_DE = ["Hans", "Fritz", "Muller", "Schmidt", "Schneider", "Fischer", "Weber", "Meyer", "Wagner", "Becker", "Schulz", "Hoffmann", "Schafer", "Koch", "Bauer", "Richter", "Klein"];
+const NAMES_FR = ["Pierre", "Jean", "Michel", "Philippe", "Alain", "Patrick", "Nicolas", "Christophe", "Laurent", "Stephane", "David", "Sebastien", "Frederic", "Julien", "Olivier", "Eric", "Guillaume"];
+
+const ALL_NAMES = [NAMES_VN, NAMES_EN, NAMES_KR, NAMES_JP, NAMES_CN, NAMES_DE, NAMES_FR];
+
+export const generateBotNames = (count: number): string[] => {
+    const names = new Set<string>();
     
-    // English/Global Names
-    "ShadowSlayer", "NoobMaster69", "DragonBorn", "John Wick", "IronMan",
-    "CaptainVietnam", "Faker", "S1mple", "Ninja", "Shroud",
-    "xX_Sniper_Xx", "DarkKnight", "GodFather", "Terminator", "Rambo",
-    "Gandalf", "Voldemort", "Arthas", "Illidan", "Kratos",
-    "MasterChief", "DoomGuy", "Link", "Zelda", "Mario",
-    "Pikachu", "Naruto", "Sasuke", "Goku", "Vegeta",
-    "Geralt", "Yennefer", "Triss", "Ciri", "Vesemir",
-    "Luffy", "Zoro", "Sanji", "Nami", "Usopp", "Chopper",
-    "Tanjiro", "Nezuko", "Zenitsu", "Inosuke", "Rengoku",
-    "Saitama", "Genos", "Mob", "Reigen", "Dimple"
-];
+    // Add fixed famous names first
+    [...NAMES_VN, ...NAMES_EN].forEach(n => names.add(n));
+
+    while(names.size < count) {
+        // Pick a random language pool
+        const pool = ALL_NAMES[Math.floor(Math.random() * ALL_NAMES.length)];
+        const base = pool[Math.floor(Math.random() * pool.length)];
+        const suffix = Math.floor(Math.random() * 999);
+        names.add(`${base}${suffix}`);
+    }
+    return Array.from(names);
+};
+
 
 // Translations
 export const TRANS = {

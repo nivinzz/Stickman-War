@@ -24,6 +24,16 @@ export enum UnitState {
   RETREAT = 'RETREAT' // AI Specific state
 }
 
+export enum RankTier {
+  BRONZE = 'BRONZE',
+  SILVER = 'SILVER',
+  GOLD = 'GOLD',
+  PLATINUM = 'PLATINUM',
+  DIAMOND = 'DIAMOND',
+  CHALLENGER = 'CHALLENGER',
+  LEGEND = 'LEGEND'
+}
+
 export interface UnitStats {
   hp: number;
   maxHp: number;
@@ -113,6 +123,7 @@ export interface Projectile {
   points?: {x: number, y: number}[]; // For Lightning zigzag
   opacity?: number; // For fading effects
   targetId?: string; // NEW: For homing arrows
+  fromSkill?: boolean; // NEW: If true, does not damage castle
 }
 
 export interface Particle {
@@ -172,6 +183,7 @@ export interface GameLevel {
   opponentName?: string;   // Name of the enemy player
   opponentElo?: number;    // Elo of the enemy (controls AI difficulty)
   mapThemeIndex?: number;  // Specific visual theme (0-11)
+  isRanked?: boolean;      // True if Ranked match
 }
 
 // Granular Upgrades
@@ -191,25 +203,33 @@ export interface UpgradeState {
   towerPower: number; // New: Tower Damage Upgrade
 }
 
+export interface PlayerStats {
+    wins: number;
+    losses: number;
+}
+
 export interface PlayerProfile {
     name: string;
-    wins: number;
-    matches: number;
-    elo: number;
-    status?: 'IDLE' | 'WAITING' | 'PLAYING'; // For bot simulation
+    // Ranked Stats (Competitive)
+    rankedStats: PlayerStats & { 
+        elo: number; 
+        streak: number; // Winning streak for bonus points
+    };
+    // Casual/Friendly Stats
+    casualStats: PlayerStats;
+    
+    rankTier: RankTier;
+    status?: 'IDLE' | 'WAITING' | 'PLAYING'; 
 }
 
 export interface GameRoom {
     id: string;
-    roomIdDisplay: string; // e.g. #1234
     name: string;
     host: string;
     hostElo: number;
     guest?: string;
     guestElo?: number;
-    status: 'WAITING' | 'PLAYING';
     mapThemeIndex: number; // 0-11
-    timer?: number; // Simulation timer for bot matches
 }
 
 export type Language = 'VN' | 'EN';
