@@ -67,39 +67,48 @@ class FirebaseService {
             return result.user;
         } catch (anonError) {
             console.warn("Anonymous Login failed. Using MOCK GUEST (Offline Mode).");
-            
-            // Fallback: Mock Guest User (No Firebase Auth required)
-            // Allows gameplay even if Firebase Quota exceeded or Auth disabled
-            const mockUid = 'guest_' + Math.floor(Math.random() * 999999);
-            const mockUser = {
-                uid: mockUid,
-                displayName: 'Guest Warrior',
-                photoURL: null,
-                email: null,
-                emailVerified: false,
-                isAnonymous: true,
-                metadata: {},
-                providerData: [],
-                refreshToken: '',
-                tenantId: null,
-                delete: async () => {},
-                getIdToken: async () => 'mock-token',
-                getIdTokenResult: async () => ({} as any),
-                reload: async () => {},
-                toJSON: () => ({}),
-                phoneNumber: null
-            } as unknown as User;
-
-            this.currentUser = mockUser;
-            await this.loadUserProfile(mockUser);
-            
-            // Notify UI manually since onAuthStateChanged won't trigger for mock user
-            if (this.onAuthUpdate) {
-                this.onAuthUpdate(this.currentUser, this.currentProfile);
-            }
-            
-            return mockUser;
+            return this.loginMockGuest();
         }
+    }
+
+    // Helper: Force Mock Guest
+    async loginMockGuest(): Promise<User | null> {
+         const mockUid = 'guest_' + Math.floor(Math.random() * 999999);
+         const mockUser = {
+            uid: mockUid,
+            displayName: 'Guest Warrior',
+            photoURL: null,
+            email: null,
+            emailVerified: false,
+            isAnonymous: true,
+            metadata: {},
+            providerData: [],
+            refreshToken: '',
+            tenantId: null,
+            delete: async () => {},
+            getIdToken: async () => 'mock-token',
+            getIdTokenResult: async () => ({} as any),
+            reload: async () => {},
+            toJSON: () => ({}),
+            phoneNumber: null
+        } as unknown as User;
+
+        this.currentUser = mockUser;
+        // Directly set profile without DB fetch to avoid hang
+        this.currentProfile = {
+            name: 'Guest Warrior',
+            avatarSeed: 'guest',
+            rankedStats: { wins: 0, losses: 0, elo: 1000, streak: 0 },
+            casualStats: { wins: 0, losses: 0, streak: 0 },
+            rankTier: RankTier.SILVER,
+            status: 'IDLE'
+        };
+        
+        if (this.onAuthUpdate) {
+            this.onAuthUpdate(this.currentUser, this.currentProfile);
+        }
+        
+        return mockUser;
     }
 
     async logout() {
@@ -125,9 +134,19 @@ class FirebaseService {
             status: 'IDLE'
         };
 
+        if (user.uid.startsWith('guest_')) {
+             this.currentProfile = defaultProfile;
+             return defaultProfile;
+        }
+
         try {
             const userRef = ref(db, `users/${user.uid}`);
-            const snapshot = await get(userRef);
+            
+            // TIMEOUT WRAPPER: If DB read takes > 2s (likely bad config/connection), fallback to default
+            const snapshotPromise = get(userRef);
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 2000));
+            
+            const snapshot: any = await Promise.race([snapshotPromise, timeoutPromise]);
             
             if (snapshot.exists()) {
                 this.currentProfile = snapshot.val();
@@ -137,7 +156,6 @@ class FirebaseService {
                     await set(userRef, defaultProfile);
                     this.currentProfile = defaultProfile;
                 } catch (writeErr) {
-                    console.warn("DB Write Permission Denied (Guest Mode?). Using local profile.");
                     this.currentProfile = defaultProfile;
                 }
             }
@@ -150,7 +168,7 @@ class FirebaseService {
             } catch(e) {}
 
         } catch (err) {
-            console.warn("DB Read Permission Denied (Guest Mode?). Using local profile.");
+            console.warn("DB Read Timeout/Error. Using local profile.");
             this.currentProfile = defaultProfile;
         }
         

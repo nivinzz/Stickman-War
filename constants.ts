@@ -260,6 +260,28 @@ export const ROOM_NAMES_EN = ["1v1 Chill", "Practice", "Testing Builds", "Fight 
 // Translations
 export const TRANS = {
   VN: {
+    // Menu
+    campaign: "CHƠI OFFLINE", // Changed from "CHIẾN DỊCH"
+    onlinePvP: "ĐẤU ONLINE",
+    
+    // Online Lobby
+    loginTitle: "Đăng nhập để chơi Online!",
+    loginGoogle: "Đăng nhập Google",
+    loginGuest: "Chơi Khách (Ngay)",
+    backMenu: "Về Menu",
+    createMatch: "TẠO TRẬN ĐẤU",
+    createRoom: "Tạo Phòng",
+    waitingPlayer: "Đang tìm đối thủ...",
+    cancel: "Hủy",
+    activeRooms: "PHÒNG HOẠT ĐỘNG",
+    join: "VÀO",
+    myRoom: "PHÒNG TÔI",
+    playing: "ĐANG CHƠI",
+    globalChat: "CHAT THẾ GIỚI",
+    saySomething: "Nói gì đó...",
+    domainError: "Lỗi Domain! Vui lòng dùng 'Chơi Khách' để vào game ngay.",
+
+    // Gameplay
     selectLevel: "CHỌN MÀN CHƠI",
     locked: "Khóa",
     start: "BẮT ĐẦU",
@@ -317,6 +339,28 @@ export const TRANS = {
     exit: "Thoát"
   },
   EN: {
+    // Menu
+    campaign: "PLAY OFFLINE", // Changed from "CAMPAIGN"
+    onlinePvP: "ONLINE PVP",
+
+    // Online Lobby
+    loginTitle: "Log in to play Online Multiplayer!",
+    loginGoogle: "Sign in with Google",
+    loginGuest: "Play as Guest",
+    backMenu: "Back to Menu",
+    createMatch: "CREATE MATCH",
+    createRoom: "Create Room",
+    waitingPlayer: "Waiting for Player...",
+    cancel: "Cancel",
+    activeRooms: "ACTIVE ROOMS",
+    join: "JOIN",
+    myRoom: "MY ROOM",
+    playing: "PLAYING",
+    globalChat: "GLOBAL CHAT",
+    saySomething: "Say something...",
+    domainError: "Domain Error! Please use 'Play as Guest' to play now.",
+
+    // Gameplay
     selectLevel: "SELECT LEVEL",
     locked: "Locked",
     start: "START",

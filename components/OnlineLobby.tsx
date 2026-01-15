@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { PlayerProfile, Language, RankTier, ChatMessage, LobbyRoom } from '../types';
-import { LEVEL_THEMES, getRankTier, getAvatarUrl } from '../constants';
-import { firebaseService } from '../services/FirebaseService'; // New Service
+import { LEVEL_THEMES, getRankTier, getAvatarUrl, TRANS } from '../constants';
+import { firebaseService } from '../services/FirebaseService'; 
 
 interface OnlineLobbyProps {
   onStartMatch: (opponentName: string, opponentElo: number, mapThemeIndex: number, isSpectator?: boolean, isRanked?: boolean, roomId?: string, myUserId?: string) => void;
@@ -12,6 +12,7 @@ interface OnlineLobbyProps {
 
 // Reuse RankIcon
 export const RankIcon: React.FC<{ tier: RankTier, className?: string }> = ({ tier, className }) => {
+    // ... (Keep existing SVG implementation)
     const getDefs = () => (
         <defs>
             <linearGradient id="gradBronze" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -90,18 +91,14 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
   const [customMapIndex, setCustomMapIndex] = useState(0);
   const [chatInput, setChatInput] = useState('');
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  
+  // Localization
+  const t = TRANS[lang];
 
   // Initialize Firebase Listeners
   useEffect(() => {
-      // 1. Subscribe to Auth State (Fix for Race Condition)
-      // Check immediately
-      if (firebaseService.currentProfile) {
-          setUserProfile(firebaseService.currentProfile);
-          setView('HOME');
-      }
-
-      // Register listener for future updates
-      firebaseService.onAuthUpdate = (user, profile) => {
+      // Logic to handle auth updates safely
+      const handleAuthUpdate = (user: any, profile: PlayerProfile | null) => {
           if (profile) {
               setUserProfile(profile);
               setView('HOME');
@@ -111,7 +108,15 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
           }
       };
 
-      // 2. Listen for Rooms
+      // 1. Check current state immediately
+      if (firebaseService.currentProfile) {
+          handleAuthUpdate(firebaseService.currentUser, firebaseService.currentProfile);
+      }
+
+      // 2. Subscribe
+      firebaseService.onAuthUpdate = handleAuthUpdate;
+
+      // 3. Listen for Rooms
       const unsubRooms = firebaseService.listenToRooms((newRooms) => {
           setRooms(newRooms);
           
@@ -119,8 +124,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
           if (firebaseService.currentRoomId) {
               const myRoom = newRooms.find(r => r.id === firebaseService.currentRoomId);
               if (myRoom && myRoom.status === 'PLAYING') {
-                  const opponentName = myRoom.host === userProfile?.name ? myRoom.guestName! : myRoom.host;
-                  const opponentElo = myRoom.host === userProfile?.name ? myRoom.guestElo! : myRoom.hostElo;
+                  const opponentName = myRoom.host === firebaseService.currentProfile?.name ? myRoom.guestName! : myRoom.host;
+                  const opponentElo = myRoom.host === firebaseService.currentProfile?.name ? myRoom.guestElo! : myRoom.hostElo;
                   
                   onStartMatch(
                       opponentName, 
@@ -135,7 +140,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
           }
       });
 
-      // 3. Listen for Chat
+      // 4. Listen for Chat
       const unsubChat = firebaseService.listenToChat((msgs) => {
           setChatHistory(msgs);
       });
@@ -145,7 +150,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
           unsubChat();
           firebaseService.onAuthUpdate = null; // Cleanup
       };
-  }, [userProfile]); // Dependencies
+  }, []); // Run ONCE on mount
 
   useEffect(() => {
       if (chatScrollRef.current) {
@@ -156,26 +161,26 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
   const handleGoogleLogin = async () => {
       setErrorMsg('');
       try {
-          const user = await firebaseService.loginWithGoogle();
-          // Profile update handled by subscription
+          await firebaseService.loginWithGoogle();
+          // Auth update handled by listener
       } catch (e: any) {
           if (e.code === 'auth/unauthorized-domain') {
-              setErrorMsg(`Lỗi Domain! Vui lòng dùng "Play as Guest" để vào game ngay.`);
+              setErrorMsg(t.domainError);
           } else {
-              setErrorMsg(`Lỗi đăng nhập: ${e.message}`);
+              setErrorMsg(`Error: ${e.message}`);
           }
       }
   };
 
   const handleGuestLogin = async () => {
       setErrorMsg('');
-      const user = await firebaseService.loginAsGuest();
-      // Profile update handled by subscription
+      await firebaseService.loginAsGuest();
+      // Auth update handled by listener
   };
 
   const handleLogout = async () => {
       await firebaseService.logout();
-      // Profile update handled by subscription
+      // Auth update handled by listener
   };
 
   const handleCreateRoom = async () => {
@@ -217,7 +222,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
           <div className="flex flex-col items-center justify-center h-[60vh] animate-fade-in relative">
               <h2 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-8">ONLINE ARENA</h2>
               <div className="bg-slate-800 p-8 rounded-xl border border-slate-600 shadow-2xl w-full max-w-md text-center">
-                  <div className="text-slate-300 mb-6">Log in to play Online Multiplayer!</div>
+                  <div className="text-slate-300 mb-6">{t.loginTitle}</div>
                   
                   <div className="flex flex-col gap-3">
                       <button 
@@ -225,7 +230,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                         className="w-full bg-white hover:bg-slate-100 text-slate-800 font-bold py-3 rounded flex items-center justify-center gap-3 transition-all"
                       >
                           <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-6 h-6"/>
-                          Sign in with Google
+                          {t.loginGoogle}
                       </button>
                       
                       <div className="relative flex items-center py-2">
@@ -238,7 +243,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                         onClick={handleGuestLogin} 
                         className={`w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded flex items-center justify-center gap-3 transition-all border border-slate-500 ${errorMsg.includes('Domain') ? 'animate-pulse ring-2 ring-yellow-400' : ''}`}
                       >
-                          👤 Play as Guest (Chơi Ngay)
+                          👤 {t.loginGuest}
                       </button>
                   </div>
 
@@ -248,12 +253,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                       </div>
                   )}
                   
-                  <button onClick={onBack} className="w-full mt-6 text-slate-500 hover:text-slate-300 text-sm underline">Back to Menu</button>
-              </div>
-              
-              {/* Version Tag */}
-              <div className="absolute bottom-[-100px] text-slate-600 font-mono text-xs">
-                  v2.0 (Live Deployment Check)
+                  <button onClick={onBack} className="w-full mt-6 text-slate-500 hover:text-slate-300 text-sm underline">{t.backMenu}</button>
               </div>
           </div>
       );
@@ -268,7 +268,6 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
             <div className="flex items-center gap-4">
                 <button onClick={onBack} className="text-slate-400 hover:text-white font-bold text-xl px-2">←</button>
                 <h2 className="text-xl font-black italic text-blue-400">ONLINE ARENA</h2>
-                <span className="text-xs text-slate-600 font-mono border border-slate-700 px-1 rounded">v2.0</span>
             </div>
             
             <div className="flex items-center gap-4">
@@ -301,7 +300,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
             <div className="w-64 bg-slate-800/50 border-r border-slate-700 p-4 flex flex-col gap-4">
                 {view === 'HOME' ? (
                     <div className="bg-slate-700/50 p-4 rounded-lg border border-slate-600">
-                        <h3 className="text-white font-bold mb-2 text-sm">CREATE MATCH</h3>
+                        <h3 className="text-white font-bold mb-2 text-sm">{t.createMatch}</h3>
                         <div className="mb-2">
                             <label className="text-[10px] text-slate-400 uppercase">Map</label>
                             <select 
@@ -318,14 +317,14 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                             onClick={handleCreateRoom}
                             className="w-full py-2 bg-blue-600 hover:bg-blue-500 rounded text-white font-bold text-sm shadow-lg"
                         >
-                            Create Room
+                            {t.createRoom}
                         </button>
                     </div>
                 ) : (
                     <div className="bg-slate-700/50 p-4 rounded-lg border border-slate-600 text-center">
                         <div className="animate-spin text-4xl mb-2">⏳</div>
-                        <div className="text-white font-bold mb-2">Waiting for Player...</div>
-                        <button onClick={handleCancelRoom} className="w-full py-2 bg-red-600 hover:bg-red-500 rounded text-white font-bold text-sm">Cancel</button>
+                        <div className="text-white font-bold mb-2">{t.waitingPlayer}</div>
+                        <button onClick={handleCancelRoom} className="w-full py-2 bg-red-600 hover:bg-red-500 rounded text-white font-bold text-sm">{t.cancel}</button>
                     </div>
                 )}
             </div>
@@ -333,10 +332,10 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
             {/* CENTER: ROOM LIST */}
             <div className="flex-1 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-slate-900 flex flex-col">
                 <div className="p-3 bg-slate-800/80 border-b border-slate-700 flex justify-between items-center backdrop-blur-sm">
-                    <span className="font-bold text-white">ACTIVE ROOMS</span>
+                    <span className="font-bold text-white">{t.activeRooms}</span>
                     <div className="text-xs text-slate-400 flex gap-4">
-                        <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500"></div> WAITING</span>
-                        <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500"></div> PLAYING</span>
+                        <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500"></div> {t.join}</span>
+                        <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500"></div> {t.playing}</span>
                     </div>
                 </div>
                 
@@ -363,11 +362,11 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                                         onClick={() => handleJoinRoom(room)} 
                                         className="px-3 py-1 bg-green-600 hover:bg-green-500 text-white text-[10px] font-bold rounded shadow cursor-pointer"
                                     >
-                                        JOIN
+                                        {t.join}
                                     </button>
                                 ) : (
                                     <button className="px-3 py-1 bg-slate-700 text-slate-400 text-[9px] font-bold rounded cursor-not-allowed opacity-70">
-                                        {room.hostId === firebaseService.currentUser?.uid ? 'MY ROOM' : 'PLAYING'}
+                                        {room.hostId === firebaseService.currentUser?.uid ? t.myRoom : t.playing}
                                     </button>
                                 )}
                             </div>
@@ -379,7 +378,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
             {/* RIGHT: CHAT */}
             <div className="w-72 bg-slate-800 border-l border-slate-700 flex flex-col">
                 <div className="flex border-b border-slate-700">
-                    <button className="flex-1 py-3 text-xs font-bold bg-slate-700 text-white border-b-2 border-blue-500">GLOBAL CHAT</button>
+                    <button className="flex-1 py-3 text-xs font-bold bg-slate-700 text-white border-b-2 border-blue-500">{t.globalChat}</button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-2 space-y-2" ref={chatScrollRef}>
                     {chatHistory.map(msg => (
@@ -396,7 +395,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                         value={chatInput}
                         onChange={(e) => setChatInput(e.target.value)}
                         className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-xs text-white focus:border-blue-500 outline-none"
-                        placeholder="Say something..." 
+                        placeholder={t.saySomething} 
                     />
                 </form>
             </div>
