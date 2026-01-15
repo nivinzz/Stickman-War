@@ -210,6 +210,7 @@ export interface PlayerStats {
 
 export interface PlayerProfile {
     name: string;
+    avatarSeed: string; // NEW: For generating consistent avatar
     // Ranked Stats (Competitive)
     rankedStats: PlayerStats & { 
         elo: number; 

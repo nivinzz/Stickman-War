@@ -201,6 +201,12 @@ export const generateBotNames = (count: number): string[] => {
     return Array.from(names);
 };
 
+// AVATAR GENERATOR (DiceBear Adventurer)
+export const getAvatarUrl = (seed: string): string => {
+    // Uses the 'adventurer' collection which fits the RPG/Stickman theme
+    return `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(seed)}`;
+};
+
 // CHAT MESSAGES - SPLIT BY TYPE (SHORT, MEDIUM, LONG)
 // Ensure min length 5, max 120.
 
