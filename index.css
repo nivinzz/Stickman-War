@@ -1,0 +1,10 @@
+
+/* 
+  This file is created to suppress the 404 error for index.css.
+  The game primarily uses Tailwind CSS via CDN.
+*/
+body {
+  margin: 0;
+  overflow: hidden;
+  background-color: #1a1a1a;
+}

@@ -213,28 +213,40 @@ const App: React.FC = () => {
   const handleSetStrategy = (s: any) => { /* logic */ };
   const handleSetVanguardPct = (p: number) => { /* logic */ };
 
+  const handleToggleSound = () => {
+      const muted = soundManager.toggleMute();
+      setIsMuted(muted);
+  };
+
   return (
     <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center p-4 font-sans text-slate-100 select-none overflow-hidden relative">
       
+      {/* GLOBAL TOP-LEFT CONTROLS (Lang + Sound) */}
+      <div className="absolute top-4 left-4 flex gap-2 z-50">
+        <button 
+            onClick={() => setLang('VN')} 
+            className={`px-3 py-1 rounded border font-bold text-xs transition-all flex items-center gap-1 ${lang === 'VN' ? 'bg-red-600 border-red-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-white'}`}
+        >
+            🇻🇳 VN
+        </button>
+        <button 
+            onClick={() => setLang('EN')} 
+            className={`px-3 py-1 rounded border font-bold text-xs transition-all flex items-center gap-1 ${lang === 'EN' ? 'bg-blue-600 border-blue-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-white'}`}
+        >
+            🇬🇧 EN
+        </button>
+        
+        <button 
+            onClick={handleToggleSound}
+            className={`px-3 py-1 rounded border font-bold text-xs transition-all flex items-center gap-1 ${!isMuted ? 'bg-green-600 border-green-400 text-white' : 'bg-slate-800 border-slate-600 text-red-400 hover:text-white'}`}
+        >
+            {isMuted ? '🔇 MUTE' : '🔊 SOUND'}
+        </button>
+      </div>
+
       {gameState === 'MENU' && (
         <div className="text-center space-y-6 animate-fade-in relative z-10 w-full max-w-lg">
           
-          {/* LANGUAGE TOGGLE */}
-          <div className="absolute top-4 right-4 flex gap-2">
-            <button 
-                onClick={() => setLang('VN')} 
-                className={`px-3 py-1 rounded border font-bold text-sm transition-all ${lang === 'VN' ? 'bg-red-600 border-red-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-white'}`}
-            >
-                🇻🇳 VN
-            </button>
-            <button 
-                onClick={() => setLang('EN')} 
-                className={`px-3 py-1 rounded border font-bold text-sm transition-all ${lang === 'EN' ? 'bg-blue-600 border-blue-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-white'}`}
-            >
-                🇬🇧 EN
-            </button>
-          </div>
-
           <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-500 mb-2">STICKMAN WAR</h1>
           
           {/* VERSION TAG */}
