@@ -102,7 +102,6 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
   // Custom Room State
   const [roomName, setRoomName] = useState('');
   const [roomIdDisplay, setRoomIdDisplay] = useState('');
-  const [searchRoomId, setSearchRoomId] = useState(''); // New search state
   const [customMapIndex, setCustomMapIndex] = useState(0);
   const [customOpponent, setCustomOpponent] = useState<PlayerProfile | null>(null);
   
@@ -217,8 +216,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
             fakeLb.unshift(newProfile);
             localStorage.setItem('stickman_bots_v4', JSON.stringify(fakeLb));
         } else {
-            // RELOAD PLAYER STATS FROM STORAGE TO ENSURE SYNC
             fakeLb[meIndex].rankTier = getRankTier(fakeLb[meIndex].rankedStats.elo);
+            // Ensure avatar seed exists for legacy data
             if (!fakeLb[meIndex].avatarSeed) fakeLb[meIndex].avatarSeed = currentName;
         }
     } else if (!savedLb) {
@@ -237,7 +236,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
         clearInterval(chatInterval);
         clearInterval(roomInterval);
     };
-  }, [view]); // Reload when view changes (e.g., coming back from match)
+  }, []);
 
   useEffect(() => {
       if (chatScrollRef.current) {
@@ -335,41 +334,36 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
               return room;
           });
 
-          // Target ~200 Bot Rooms for "Busy" look
-          const MAX_BOT_ROOMS = 200;
+          // Target ~80 Bot Rooms. 
+          const MAX_BOT_ROOMS = 80;
           
           if (next.length < MAX_BOT_ROOMS) {
-              // Add multiple rooms at once to fill up faster
-              for (let i = 0; i < 3; i++) {
-                  if (next.length >= MAX_BOT_ROOMS) break;
-                  
-                  const host = getRandom<PlayerProfile>(leaderboardRef.current);
-                  const isVN = NAMES_VN.some(n => host.name.includes(n));
-                  const roomName = isVN ? getRandom(ROOM_NAMES_VN) : getRandom(ROOM_NAMES_EN);
-                  
-                  // 80% Playing, 20% Waiting (Chaotic battlefield look)
-                  const startAsPlaying = Math.random() > 0.2;
-                  let guestName: string | undefined;
-                  let guestElo: number | undefined;
+              const host = getRandom<PlayerProfile>(leaderboardRef.current);
+              const isVN = NAMES_VN.some(n => host.name.includes(n));
+              const roomName = isVN ? getRandom(ROOM_NAMES_VN) : getRandom(ROOM_NAMES_EN);
+              
+              // 70% Playing, 30% Waiting
+              const startAsPlaying = Math.random() > 0.3;
+              let guestName: string | undefined;
+              let guestElo: number | undefined;
 
-                  if (startAsPlaying) {
-                      const guest = getRandom<PlayerProfile>(leaderboardRef.current);
-                      guestName = guest.name;
-                      guestElo = guest.rankedStats.elo;
-                  }
-
-                  next.push({
-                      id: Math.random().toString(),
-                      name: `${roomName} #${Math.floor(Math.random()*9999)}`,
-                      host: host.name,
-                      hostElo: host.rankedStats.elo,
-                      status: startAsPlaying ? 'PLAYING' : 'WAITING',
-                      players: startAsPlaying ? 2 : 1,
-                      mapIndex: Math.floor(Math.random() * 12),
-                      guestName,
-                      guestElo
-                  });
+              if (startAsPlaying) {
+                  const guest = getRandom<PlayerProfile>(leaderboardRef.current);
+                  guestName = guest.name;
+                  guestElo = guest.rankedStats.elo;
               }
+
+              next.push({
+                  id: Math.random().toString(),
+                  name: `${roomName} #${Math.floor(Math.random()*999)}`,
+                  host: host.name,
+                  hostElo: host.rankedStats.elo,
+                  status: startAsPlaying ? 'PLAYING' : 'WAITING',
+                  players: startAsPlaying ? 2 : 1,
+                  mapIndex: Math.floor(Math.random() * 12),
+                  guestName,
+                  guestElo
+              });
           }
           
           return next;
@@ -394,14 +388,11 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
 
   // Change Player Avatar
   const handleChangeAvatar = () => {
-      const myName = playerName || currentPlayerNameRef.current;
-      if (!myName) return;
-      
+      if (!myProfile) return;
       const newSeed = Math.random().toString(36).substring(7);
       
-      // Update global leaderboard state
       const newLb = leaderboard.map(p => {
-          if (p.name === myName) {
+          if (p.name === playerName) {
               return { ...p, avatarSeed: newSeed };
           }
           return p;
@@ -411,8 +402,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
       leaderboardRef.current = newLb;
       localStorage.setItem('stickman_bots_v4', JSON.stringify(newLb));
       
-      // Force update selected profile view if showing me
-      if (selectedProfile && selectedProfile.name === myName) {
+      // Update selected profile view if showing me
+      if (selectedProfile && selectedProfile.name === playerName) {
           setSelectedProfile({ ...selectedProfile, avatarSeed: newSeed });
       }
   };
@@ -421,12 +412,12 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
       setCustomOpponent(null);
       setCustomMapIndex(0);
       const generatedId = Math.floor(Math.random() * 9000) + 1000;
-      setRoomIdDisplay(`${generatedId}`); // Just number
+      setRoomIdDisplay(`#${generatedId}`);
       setRoomName(`${playerName}'s Room #${generatedId}`);
       
       const myProf = leaderboard.find(p => p.name === playerName);
       const newRoom: LobbyRoom = {
-          id: `${generatedId}`, // Use generated ID as room ID for searching
+          id: `${playerName}_${Date.now()}`,
           name: `${playerName}'s Room #${generatedId}`,
           host: playerName,
           hostElo: myProf?.rankedStats.elo || 100,
@@ -575,25 +566,25 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
 
   const renderDetailModal = () => {
       if (!selectedProfile) return null;
-      const isMe = selectedProfile.name === playerName;
-
       return (
           <div className="absolute inset-0 z-[60] bg-black/80 flex items-center justify-center p-4" onClick={() => setSelectedProfile(null)}>
               <div className="bg-slate-800 border-2 border-slate-600 p-6 rounded-xl w-full max-w-sm shadow-2xl relative" onClick={e => e.stopPropagation()}>
                   <button className="absolute top-2 right-4 text-slate-400 hover:text-white text-xl" onClick={() => setSelectedProfile(null)}>✕</button>
                   <div className="flex flex-col items-center mb-6">
-                       <div className="w-24 h-24 bg-slate-700 rounded-full flex items-center justify-center border-4 border-blue-500 mb-2 relative overflow-hidden group">
+                       <div className="w-20 h-20 bg-slate-700 rounded-full flex items-center justify-center border-2 border-blue-500 mb-2 relative overflow-hidden">
                            {selectedProfile.avatarSeed ? (
                                <img src={getAvatarUrl(selectedProfile.avatarSeed)} alt="Avatar" className="w-full h-full object-cover" />
                            ) : (
                                <RankIcon tier={selectedProfile.rankTier} className="w-16 h-16" />
                            )}
-                           
-                           {/* CHANGE AVATAR BUTTON (VISIBLE ON HOVER OR ALWAYS IF ME) */}
-                           {isMe && (
-                               <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" onClick={handleChangeAvatar}>
-                                   <span className="text-white font-bold text-xs">CHANGE</span>
-                               </div>
+                           {/* CHANGE AVATAR BUTTON (ONLY FOR ME) */}
+                           {selectedProfile.name === playerName && (
+                               <button 
+                                onClick={handleChangeAvatar}
+                                className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-500 text-white text-[10px] p-1 rounded-tl" 
+                                title="Change Avatar">
+                                   🔄
+                               </button>
                            )}
                        </div>
                        <h3 className="text-2xl font-black text-white tracking-wide uppercase">{selectedProfile.name}</h3>
@@ -612,12 +603,12 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                       </div>
                   </div>
                   <div className="space-y-2 text-sm text-slate-300">
-                      <div className="flex justify-between border-b border-slate-700 pb-1"><span>Wins:</span> <span className="text-green-400 font-bold">{selectedProfile.rankedStats.wins || 0}</span></div>
-                      <div className="flex justify-between border-b border-slate-700 pb-1"><span>Losses:</span> <span className="text-red-400 font-bold">{selectedProfile.rankedStats.losses || 0}</span></div>
-                      <div className="flex justify-between"><span>Streak:</span> <span className="text-orange-400 font-bold">{selectedProfile.rankedStats.streak || 0}</span></div>
+                      <div className="flex justify-between border-b border-slate-700 pb-1"><span>Wins:</span> <span className="text-green-400 font-bold">{selectedProfile.rankedStats.wins}</span></div>
+                      <div className="flex justify-between border-b border-slate-700 pb-1"><span>Losses:</span> <span className="text-red-400 font-bold">{selectedProfile.rankedStats.losses}</span></div>
+                      <div className="flex justify-between"><span>Streak:</span> <span className="text-orange-400 font-bold">{selectedProfile.rankedStats.streak}</span></div>
                   </div>
                   
-                  {!isMe && (
+                  {selectedProfile.name !== playerName && (
                       <div className="mt-6 flex gap-2">
                           <button onClick={() => { handleInvitePlayer(selectedProfile); setSelectedProfile(null); }} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded">Challenge</button>
                       </div>
@@ -629,20 +620,17 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
 
   const myProfile = leaderboard.find(p => p.name === playerName);
 
-  // Filter Rooms based on ID search
-  let displayRooms = [...sharedRooms, ...botRooms].sort((a, b) => {
+  const displayRooms = [...sharedRooms, ...botRooms].sort((a, b) => {
       const aIsShared = sharedRooms.some(r => r.id === a.id);
       const bIsShared = sharedRooms.some(r => r.id === b.id);
+      
       if (aIsShared && !bIsShared) return -1;
       if (!aIsShared && bIsShared) return 1;
+
       if (a.status === 'WAITING' && b.status !== 'WAITING') return -1;
       if (a.status !== 'WAITING' && b.status === 'WAITING') return 1;
       return 0;
   });
-
-  if (searchRoomId.trim()) {
-      displayRooms = displayRooms.filter(r => r.name.includes(searchRoomId) || (r.id && r.id.includes(searchRoomId)));
-  }
 
   // --- LOGIN VIEW ---
   if (view === 'LOGIN') {
@@ -715,15 +703,6 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
             <div className="flex items-center gap-4">
                 <button onClick={onBack} className="text-slate-400 hover:text-white font-bold text-xl px-2">←</button>
                 <h2 className="text-xl font-black italic text-blue-400">ONLINE ARENA</h2>
-                <div className="relative">
-                    <input 
-                        type="text" 
-                        placeholder="🔍 Find Room ID..." 
-                        value={searchRoomId}
-                        onChange={(e) => setSearchRoomId(e.target.value)}
-                        className="bg-slate-900 border border-slate-600 text-slate-200 px-2 py-1 rounded text-xs w-40 focus:w-60 transition-all"
-                    />
-                </div>
             </div>
             
             <div className="flex items-center gap-4 cursor-pointer hover:bg-slate-700 px-2 py-1 rounded transition-all" onClick={() => myProfile && setSelectedProfile(myProfile)}>
@@ -771,14 +750,14 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                     </div>
                     {statsTab === 'RANKED' ? (
                         <>
-                            <div className="flex justify-between text-sm mb-1"><span>Wins:</span> <span className="text-green-400">{myProfile?.rankedStats.wins || 0}</span></div>
-                            <div className="flex justify-between text-sm mb-1"><span>Losses:</span> <span className="text-red-400">{myProfile?.rankedStats.losses || 0}</span></div>
-                            <div className="flex justify-between text-sm"><span>Streak:</span> <span className="text-orange-400">🔥 {myProfile?.rankedStats.streak || 0}</span></div>
+                            <div className="flex justify-between text-sm mb-1"><span>Wins:</span> <span className="text-green-400">{myProfile?.rankedStats.wins}</span></div>
+                            <div className="flex justify-between text-sm mb-1"><span>Losses:</span> <span className="text-red-400">{myProfile?.rankedStats.losses}</span></div>
+                            <div className="flex justify-between text-sm"><span>Streak:</span> <span className="text-orange-400">🔥 {myProfile?.rankedStats.streak}</span></div>
                         </>
                     ) : (
                         <>
-                            <div className="flex justify-between text-sm mb-1"><span>Wins:</span> <span className="text-green-400">{myProfile?.casualStats.wins || 0}</span></div>
-                            <div className="flex justify-between text-sm mb-1"><span>Losses:</span> <span className="text-red-400">{myProfile?.casualStats.losses || 0}</span></div>
+                            <div className="flex justify-between text-sm mb-1"><span>Wins:</span> <span className="text-green-400">{myProfile?.casualStats.wins}</span></div>
+                            <div className="flex justify-between text-sm mb-1"><span>Losses:</span> <span className="text-red-400">{myProfile?.casualStats.losses}</span></div>
                             <div className="flex justify-between text-sm"><span>Streak:</span> <span className="text-blue-400">🌊 {myProfile?.casualStats.streak || 0}</span></div>
                         </>
                     )}
@@ -798,9 +777,6 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                         </div>
                         {/* UPDATED GRID: MORE COLS (2 -> 4), SMALLER GAP, SMALLER TEXT */}
                         <div className="flex-1 overflow-y-auto p-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 content-start custom-scrollbar">
-                            {displayRooms.length === 0 && (
-                                <div className="col-span-full text-center text-slate-500 py-10 italic">No rooms found matching "{searchRoomId}"</div>
-                            )}
                             {displayRooms.map(room => (
                                 <div key={room.id} className={`bg-slate-800 border rounded-lg p-2 transition-all shadow flex flex-col gap-1 relative overflow-hidden group ${room.status === 'PLAYING' ? 'border-red-500/30' : 'border-slate-600 hover:border-blue-500'}`}>
                                     <div className={`absolute top-0 left-0 w-0.5 h-full ${room.status === 'WAITING' ? 'bg-green-500' : 'bg-red-500'}`}></div>
@@ -871,7 +847,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                              {/* PLAYER CARD */}
                              <div className="w-48 h-64 bg-slate-800 border-2 border-blue-500 rounded-xl flex flex-col items-center justify-center gap-2 shadow-xl relative overflow-hidden">
                                  {/* AVATAR DISPLAY */}
-                                 <div className="w-24 h-24 rounded-full border-2 border-white/20 bg-slate-700 mb-2 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity" onClick={handleChangeAvatar} title="Click to Change Avatar">
+                                 <div className="w-24 h-24 rounded-full border-2 border-white/20 bg-slate-700 mb-2 overflow-hidden">
                                      <img src={getAvatarUrl(myProfile?.avatarSeed || playerName)} alt="Me" className="w-full h-full object-cover" />
                                  </div>
                                  

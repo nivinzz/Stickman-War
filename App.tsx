@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import GameCanvas from './components/GameCanvas';
 import ControlPanel from './components/ControlPanel';
@@ -123,8 +122,7 @@ const App: React.FC = () => {
 
   // Load My Profile for PvP Header
   useEffect(() => {
-      // Always refresh myProfile when entering lobby or playing
-      if (gameState === 'ONLINE_LOBBY' || (isOnlineMatch && gameState === 'PLAYING')) {
+      if (isOnlineMatch && gameState === 'PLAYING') {
           const savedLb = localStorage.getItem('stickman_bots_v4');
           const myName = localStorage.getItem('stickman_player_name');
           if (savedLb && myName) {
@@ -133,7 +131,7 @@ const App: React.FC = () => {
               if (me) setMyProfile(me);
           }
       }
-  }, [gameState, isOnlineMatch]);
+  }, [isOnlineMatch, gameState]);
 
   const saveProgress = (newMaxLevel: number, currentUpgrades: UpgradeState, records: Record<number, number>) => {
       localStorage.setItem('stickman_max_level', newMaxLevel.toString());
@@ -158,9 +156,10 @@ const App: React.FC = () => {
       const myName = localStorage.getItem('stickman_player_name') || 'You';
       let lb: PlayerProfile[] = savedLb ? JSON.parse(savedLb) : [];
       
-      let profileIndex = lb.findIndex(p => p.name === myName);
-      if (profileIndex === -1) {
-          const newProfile: PlayerProfile = { 
+      let profile = lb.find(p => p.name === myName);
+      if (!profile) {
+          // If for some reason profile is missing (should be fixed by Lobby self-repair), create temp
+          profile = { 
               name: myName, 
               avatarSeed: myName,
               rankedStats: { wins: 0, losses: 0, elo: 100, streak: 0 },
@@ -168,12 +167,9 @@ const App: React.FC = () => {
               rankTier: RankTier.BRONZE,
               status: 'IDLE' 
           };
-          lb.push(newProfile);
-          profileIndex = lb.length - 1;
+          lb.push(profile);
       }
       
-      const profile = lb[profileIndex];
-
       // Use Ref to check mode, as state might be stale in closure
       if (isRankedMatchRef.current) {
           // RANKED LOGIC
@@ -212,19 +208,18 @@ const App: React.FC = () => {
       } else {
           // CASUAL LOGIC
           if (win) {
-              profile.casualStats.wins = (profile.casualStats.wins || 0) + 1;
+              profile.casualStats.wins++;
               profile.casualStats.streak = (profile.casualStats.streak || 0) + 1;
           } else {
-              profile.casualStats.losses = (profile.casualStats.losses || 0) + 1;
+              profile.casualStats.losses++;
               profile.casualStats.streak = 0;
           }
           setMatchResult(null); // No Elo display for casual
       }
       
-      // Update the array and Save Immediately
-      lb[profileIndex] = profile;
+      // Save Immediately
       localStorage.setItem('stickman_bots_v4', JSON.stringify(lb));
-      setMyProfile({ ...profile }); // Force update state for UI
+      setMyProfile(profile); // Update state for UI
   };
 
   const formatTime = (seconds: number) => {
@@ -316,6 +311,7 @@ const App: React.FC = () => {
       }
   };
 
+  // UPDATED START GAME FUNCTION
   const startGame = (lvl: number, isMultiplayer: boolean = false, oppName: string = '', oppElo: number = 1000, mapId: number = 0, isSpec: boolean = false, isRanked: boolean = false) => {
     setPaused(false);
     setGameStarted(false); 
@@ -519,21 +515,17 @@ const App: React.FC = () => {
   };
 
   const handleBackToMenu = () => {
-      // EXIT CONFIRMATION & FORFEIT LOGIC
+      // EXIT CONFIRMATION LOGIC
       if (gameState === 'PLAYING' && isOnlineMatch && !engine?.victory && !engine?.gameOver && !isSpectator) {
           const msg = isRankedMatch 
             ? "Thoát trận sẽ bị tính là THUA và trừ Elo. Bạn chắc chắn?" 
             : "Thoát trận sẽ bị ghi nhận là THUA. Bạn chắc chắn?";
             
           if (window.confirm(msg)) {
-              // Count as loss IMMEDIATELY
+              // Count as loss
               updateLeaderboard(false);
-              
               setEngine(null);
-              // Force a small delay or state update cycle to ensure storage is written before lobby mounts
-              setTimeout(() => {
-                  setGameState('ONLINE_LOBBY');
-              }, 50);
+              setGameState('ONLINE_LOBBY');
           }
       } else {
           setEngine(null);
@@ -587,7 +579,7 @@ const App: React.FC = () => {
                   <div className="flex flex-col items-center mb-6">
                        <div className="w-20 h-20 bg-slate-700 rounded-full flex items-center justify-center text-4xl border-2 border-blue-500 mb-2 relative overflow-hidden">
                            <div className="absolute inset-0 bg-gradient-to-br from-slate-600 to-slate-800 opacity-50"></div>
-                           <img src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(viewingProfile.avatarSeed || viewingProfile.name)}`} alt="Avatar" className="w-full h-full object-cover z-10" />
+                           <span className="z-10">👤</span>
                        </div>
                        <h3 className="text-2xl font-black text-white tracking-wide uppercase">{viewingProfile.name}</h3>
                        <div className="text-xs text-slate-400 uppercase tracking-widest font-bold mt-1">Warrior Profile</div>
@@ -604,9 +596,9 @@ const App: React.FC = () => {
                               </div>
                           </div>
                           <div className="grid grid-cols-2 gap-y-2 text-sm relative z-10">
-                              <div className="text-slate-400">Wins: <span className="text-green-400 font-bold text-lg">{viewingProfile.rankedStats.wins || 0}</span></div>
-                              <div className="text-slate-400">Losses: <span className="text-red-400 font-bold text-lg">{viewingProfile.rankedStats.losses || 0}</span></div>
-                              <div className="text-slate-400">Rating: <span className="text-yellow-400 font-bold">{viewingProfile.rankedStats.elo || 0}</span></div>
+                              <div className="text-slate-400">Wins: <span className="text-green-400 font-bold text-lg">{viewingProfile.rankedStats.wins}</span></div>
+                              <div className="text-slate-400">Losses: <span className="text-red-400 font-bold text-lg">{viewingProfile.rankedStats.losses}</span></div>
+                              <div className="text-slate-400">Rating: <span className="text-yellow-400 font-bold">{viewingProfile.rankedStats.elo}</span></div>
                           </div>
                       </div>
                   </div>
@@ -679,8 +671,6 @@ const App: React.FC = () => {
           />
       )}
 
-      {/* ... (Level Select and Playing States remain similar, just ensuring profile updates) ... */}
-      
       {gameState === 'LEVEL_SELECT' && (
           <div className="w-full max-w-5xl animate-fade-in text-center h-[80vh] flex flex-col">
               <h2 className="text-4xl font-bold mb-4 text-white">{t.selectLevel}</h2>
