@@ -4,7 +4,7 @@ import { PlayerProfile, Language, RankTier } from '../types';
 import { generateBotNames, LEVEL_THEMES, getRankTier } from '../constants';
 
 interface OnlineLobbyProps {
-  onStartMatch: (opponentName: string, opponentElo: number, mapThemeIndex: number, isSpectator?: boolean) => void;
+  onStartMatch: (opponentName: string, opponentElo: number, mapThemeIndex: number, isSpectator?: boolean, isRanked?: boolean) => void;
   onBack: () => void;
   lang: Language;
 }
@@ -155,54 +155,67 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
   const currentPlayerNameRef = useRef<string>('');
 
   useEffect(() => {
+    // 1. Resolve Name
     const savedName = localStorage.getItem('stickman_player_name');
+    let currentName = '';
     if (savedName) {
         setPlayerName(savedName);
         currentPlayerNameRef.current = savedName;
+        currentName = savedName;
         setView('HOME');
     }
     
+    // 2. Resolve Leaderboard
     let fakeLb: PlayerProfile[] = [];
     const savedLb = localStorage.getItem('stickman_bots_v4'); 
     
     if (savedLb) {
-        fakeLb = JSON.parse(savedLb);
-    } else {
+        try {
+            fakeLb = JSON.parse(savedLb);
+        } catch (e) {
+            console.error("LB Corrupt", e);
+            fakeLb = [];
+        }
+    } 
+    
+    if (fakeLb.length === 0) {
         const generatedNames = generateBotNames(600);
         fakeLb = generatedNames.map(name => {
             const r = Math.random();
-            let baseElo = 0;
-            if (r < 0.4) baseElo = Math.random() * 250;
-            else if (r < 0.7) baseElo = 250 + Math.random() * 300;
-            else if (r < 0.85) baseElo = 550 + Math.random() * 350;
-            else if (r < 0.95) baseElo = 900 + Math.random() * 400;
-            else baseElo = 1300 + Math.random() * 1000;
-
-            baseElo = Math.floor(baseElo);
-            
+            let baseElo = Math.floor(r < 0.4 ? Math.random() * 250 : r < 0.7 ? 250 + Math.random() * 300 : r < 0.85 ? 550 + Math.random() * 350 : r < 0.95 ? 900 + Math.random() * 400 : 1300 + Math.random() * 1000);
             const rankMatches = Math.floor(Math.random() * 300) + 10;
-            const rankWinRate = 0.3 + ((baseElo / 2500) * 0.4); 
-            const rankWins = Math.floor(rankMatches * rankWinRate);
-            const casualMatches = Math.floor(Math.random() * 200);
-            const casualWins = Math.floor(casualMatches * (0.4 + Math.random() * 0.2));
-
+            const rankWins = Math.floor(rankMatches * (0.3 + ((baseElo / 2500) * 0.4)));
             return {
                 name,
-                rankedStats: {
-                    wins: rankWins,
-                    losses: rankMatches - rankWins,
-                    elo: baseElo,
-                    streak: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0
-                },
-                casualStats: {
-                    wins: casualWins,
-                    losses: casualMatches - casualWins
-                },
+                rankedStats: { wins: rankWins, losses: rankMatches - rankWins, elo: baseElo, streak: Math.random() > 0.8 ? Math.floor(Math.random() * 5) : 0 },
+                casualStats: { wins: Math.floor(Math.random() * 50), losses: Math.floor(Math.random() * 50) },
                 rankTier: getRankTier(baseElo),
                 status: 'IDLE'
             };
         });
-        localStorage.setItem('stickman_bots_v4', JSON.stringify(fakeLb));
+    }
+
+    // 3. SELF-REPAIR: Ensure current player exists
+    if (currentName) {
+        const meIndex = fakeLb.findIndex(p => p.name === currentName);
+        if (meIndex === -1) {
+             const newProfile: PlayerProfile = { 
+                name: currentName, 
+                rankedStats: { wins: 0, losses: 0, elo: 100, streak: 0 },
+                casualStats: { wins: 0, losses: 0 },
+                rankTier: RankTier.BRONZE, 
+                status: 'IDLE' 
+            };
+            fakeLb.unshift(newProfile);
+            // SAVE IMMEDIATELY TO FIX STATE
+            localStorage.setItem('stickman_bots_v4', JSON.stringify(fakeLb));
+        } else {
+            // Update tier just in case
+            fakeLb[meIndex].rankTier = getRankTier(fakeLb[meIndex].rankedStats.elo);
+        }
+    } else {
+        // If we are generated fresh but no user login yet, ensure we save the bots
+        if (!savedLb) localStorage.setItem('stickman_bots_v4', JSON.stringify(fakeLb));
     }
 
     setLeaderboard(fakeLb);
@@ -318,7 +331,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
 
   const handleStartCustom = () => {
       if (customOpponent) {
-          onStartMatch(customOpponent.name, customOpponent.rankedStats.elo, customMapIndex, false);
+          // Pass False for Ranked
+          onStartMatch(customOpponent.name, customOpponent.rankedStats.elo, customMapIndex, false, false);
       }
   };
 
@@ -351,7 +365,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
 
                   if (opponent) {
                       const randomMap = Math.floor(Math.random() * 12);
-                      onStartMatch(opponent.name, opponent.rankedStats.elo, randomMap, false);
+                      // Pass True for Ranked
+                      onStartMatch(opponent.name, opponent.rankedStats.elo, randomMap, false, true);
                       clearInterval(interval);
                   }
               }
@@ -424,7 +439,6 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
       );
   }
 
-  // ... rest of the file stays same
   if (view === 'LOGIN') {
       return (
           <div className="flex flex-col items-center justify-center h-[60vh] animate-fade-in">
@@ -473,19 +487,20 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                 <h2 className="text-2xl font-black italic text-blue-400">ONLINE ARENA</h2>
             </div>
             
-            <div 
+            <button 
                 className="flex items-center gap-4 bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-2 rounded-xl border border-blue-500/50 cursor-pointer hover:bg-slate-800 transition-all shadow-lg hover:scale-105" 
                 onClick={() => myProfile && setSelectedProfile(myProfile)}
+                title="Click to view stats"
             >
                 <div className="flex flex-col items-end">
                     <span className="font-bold text-white text-xl tracking-wide">{playerName}</span>
-                    <span className="text-[10px] text-blue-300 uppercase font-bold tracking-widest">View Profile</span>
+                    <span className="text-[10px] text-blue-300 uppercase font-bold tracking-widest">Click for Stats</span>
                 </div>
                 {/* RANK ICON DISPLAY IN HEADER */}
                 <div className="bg-slate-900/50 p-1 rounded-lg border border-slate-700/50">
                     {myProfile && renderRankBadge(myProfile.rankTier, myProfile.rankedStats.elo)}
                 </div>
-            </div>
+            </button>
         </div>
 
         {/* MAIN CONTENT AREA */}

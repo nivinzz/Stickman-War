@@ -159,6 +159,7 @@ const App: React.FC = () => {
       
       let profile = lb.find(p => p.name === myName);
       if (!profile) {
+          // If for some reason profile is missing (should be fixed by Lobby self-repair), create temp
           profile = { 
               name: myName, 
               rankedStats: { wins: 0, losses: 0, elo: 100, streak: 0 },
@@ -305,17 +306,16 @@ const App: React.FC = () => {
   };
 
   // UPDATED START GAME FUNCTION
-  const startGame = (lvl: number, isMultiplayer: boolean = false, oppName: string = '', oppElo: number = 1000, mapId: number = 0, isSpec: boolean = false) => {
+  const startGame = (lvl: number, isMultiplayer: boolean = false, oppName: string = '', oppElo: number = 1000, mapId: number = 0, isSpec: boolean = false, isRanked: boolean = false) => {
     setPaused(false);
     setGameStarted(false); 
     setGameState('PLAYING');
     setTimeElapsed(0);
     setIsOnlineMatch(isMultiplayer);
-    // Explicitly update ref for immediate use if needed, though effect handles it
     isOnlineMatchRef.current = isMultiplayer;
     
-    setIsRankedMatch(true); // Default online is ranked
-    isRankedMatchRef.current = true;
+    setIsRankedMatch(isRanked); 
+    isRankedMatchRef.current = isRanked;
 
     setIsSpectator(isSpec);
     isSpectatorRef.current = isSpec;
@@ -497,7 +497,7 @@ const App: React.FC = () => {
   };
 
   const handleRestart = () => {
-    startGame(level, isOnlineMatch, opponentName, opponentElo, mapThemeIndex, isSpectator); 
+    startGame(level, isOnlineMatch, opponentName, opponentElo, mapThemeIndex, isSpectator, isRankedMatch); 
   };
 
   const handleStartMatch = () => {
@@ -657,9 +657,8 @@ const App: React.FC = () => {
           <OnlineLobby 
             lang={lang}
             onBack={() => setGameState('MENU')}
-            onStartMatch={(oppName, oppElo, mapId, isSpec) => {
-                setIsRankedMatch(true); 
-                startGame(30, true, oppName, oppElo, mapId, isSpec);
+            onStartMatch={(oppName, oppElo, mapId, isSpec, isRanked) => {
+                startGame(30, true, oppName, oppElo, mapId, isSpec, isRanked);
             }} 
           />
       )}
