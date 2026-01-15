@@ -143,12 +143,27 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
 
   const handleGoogleLogin = async () => {
       setErrorMsg('');
-      const user = await firebaseService.loginWithGoogle();
+      try {
+          const user = await firebaseService.loginWithGoogle();
+          if (user && firebaseService.currentProfile) {
+              setUserProfile(firebaseService.currentProfile);
+              setView('HOME');
+          }
+      } catch (e: any) {
+          if (e.code === 'auth/unauthorized-domain') {
+              setErrorMsg(`Lỗi Domain! Bạn cần thêm domain hiện tại vào Firebase Console -> Authentication -> Settings -> Authorized Domains.`);
+          } else {
+              setErrorMsg(`Lỗi đăng nhập: ${e.message}`);
+          }
+      }
+  };
+
+  const handleGuestLogin = async () => {
+      setErrorMsg('');
+      const user = await firebaseService.loginAsGuest();
       if (user && firebaseService.currentProfile) {
           setUserProfile(firebaseService.currentProfile);
           setView('HOME');
-      } else {
-          setErrorMsg("Login Failed. If you are on a preview domain, please enable Anonymous Auth in Firebase Console or add this domain to Authorized Domains.");
       }
   };
 
@@ -191,20 +206,38 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
           <div className="flex flex-col items-center justify-center h-[60vh] animate-fade-in">
               <h2 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-8">ONLINE ARENA</h2>
               <div className="bg-slate-800 p-8 rounded-xl border border-slate-600 shadow-2xl w-full max-w-md text-center">
-                  <div className="text-slate-300 mb-6">Log in with Google to play Online Multiplayer, Chat, and Save Rank!</div>
-                  <button 
-                    onClick={handleGoogleLogin} 
-                    className="w-full bg-white hover:bg-slate-100 text-slate-800 font-bold py-3 rounded flex items-center justify-center gap-3 transition-all"
-                  >
-                      <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-6 h-6"/>
-                      Sign in with Google
-                  </button>
+                  <div className="text-slate-300 mb-6">Log in to play Online Multiplayer!</div>
+                  
+                  <div className="flex flex-col gap-3">
+                      <button 
+                        onClick={handleGoogleLogin} 
+                        className="w-full bg-white hover:bg-slate-100 text-slate-800 font-bold py-3 rounded flex items-center justify-center gap-3 transition-all"
+                      >
+                          <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-6 h-6"/>
+                          Sign in with Google
+                      </button>
+                      
+                      <div className="relative flex items-center py-2">
+                          <div className="flex-grow border-t border-slate-600"></div>
+                          <span className="flex-shrink mx-4 text-slate-500 text-xs">OR</span>
+                          <div className="flex-grow border-t border-slate-600"></div>
+                      </div>
+
+                      <button 
+                        onClick={handleGuestLogin} 
+                        className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded flex items-center justify-center gap-3 transition-all border border-slate-500"
+                      >
+                          👤 Play as Guest
+                      </button>
+                  </div>
+
                   {errorMsg && (
-                      <div className="mt-4 p-2 bg-red-900/50 border border-red-500 rounded text-red-200 text-xs">
-                          {errorMsg}
+                      <div className="mt-4 p-2 bg-red-900/50 border border-red-500 rounded text-red-200 text-xs text-left">
+                          ⚠️ {errorMsg}
                       </div>
                   )}
-                  <button onClick={onBack} className="w-full mt-4 border border-slate-600 text-slate-400 py-2 rounded hover:bg-slate-700">Back to Menu</button>
+                  
+                  <button onClick={onBack} className="w-full mt-6 text-slate-500 hover:text-slate-300 text-sm underline">Back to Menu</button>
               </div>
           </div>
       );

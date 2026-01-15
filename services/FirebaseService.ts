@@ -31,6 +31,8 @@ class FirebaseService {
     }
 
     // --- AUTHENTICATION ---
+
+    // 1. Google Login (Standard)
     async loginWithGoogle(): Promise<User | null> {
         try {
             console.log("Attempting Google Login...");
@@ -40,44 +42,47 @@ class FirebaseService {
             return result.user;
         } catch (error: any) {
             console.warn("Google Login failed:", error.code, error.message);
-            
-            // Fallback 1: Attempt Anonymous Login
-            try {
-                console.log("Attempting Anonymous Login...");
-                const result = await signInAnonymously(auth);
-                this.currentUser = result.user;
-                await this.loadUserProfile(result.user);
-                return result.user;
-            } catch (anonError) {
-                console.warn("Anonymous Login failed. Falling back to GUEST MODE (Mock).");
-                
-                // Fallback 2: Mock Guest User (No Firebase Auth required)
-                // This ensures the user can always enter the lobby even if Firebase Auth is fully blocked.
-                const mockUid = 'guest_' + Math.floor(Math.random() * 999999);
-                const mockUser = {
-                    uid: mockUid,
-                    displayName: 'Guest Warrior',
-                    photoURL: null,
-                    email: null,
-                    emailVerified: false,
-                    isAnonymous: true,
-                    metadata: {},
-                    providerData: [],
-                    refreshToken: '',
-                    tenantId: null,
-                    delete: async () => {},
-                    getIdToken: async () => 'mock-token',
-                    getIdTokenResult: async () => ({} as any),
-                    reload: async () => {},
-                    toJSON: () => ({}),
-                    phoneNumber: null
-                } as unknown as User;
+            throw error; // Throw error to let UI handle the message
+        }
+    }
 
-                this.currentUser = mockUser;
-                // We try to load profile, but if DB fails (due to no auth rules), we handle it gracefully inside loadUserProfile
-                await this.loadUserProfile(mockUser);
-                return mockUser;
-            }
+    // 2. Guest Login (Explicit Fallback)
+    async loginAsGuest(): Promise<User | null> {
+        try {
+            console.log("Attempting Anonymous/Guest Login...");
+            // Try Firebase Anonymous Auth first
+            const result = await signInAnonymously(auth);
+            this.currentUser = result.user;
+            await this.loadUserProfile(result.user);
+            return result.user;
+        } catch (anonError) {
+            console.warn("Anonymous Login failed. Using MOCK GUEST (Offline Mode).");
+            
+            // Fallback: Mock Guest User (No Firebase Auth required)
+            // Allows gameplay even if Firebase Quota exceeded or Auth disabled
+            const mockUid = 'guest_' + Math.floor(Math.random() * 999999);
+            const mockUser = {
+                uid: mockUid,
+                displayName: 'Guest Warrior',
+                photoURL: null,
+                email: null,
+                emailVerified: false,
+                isAnonymous: true,
+                metadata: {},
+                providerData: [],
+                refreshToken: '',
+                tenantId: null,
+                delete: async () => {},
+                getIdToken: async () => 'mock-token',
+                getIdTokenResult: async () => ({} as any),
+                reload: async () => {},
+                toJSON: () => ({}),
+                phoneNumber: null
+            } as unknown as User;
+
+            this.currentUser = mockUser;
+            await this.loadUserProfile(mockUser);
+            return mockUser;
         }
     }
 
@@ -93,7 +98,7 @@ class FirebaseService {
 
     async loadUserProfile(user: User): Promise<PlayerProfile> {
         const defaultProfile: PlayerProfile = {
-            name: user.displayName || `Warrior ${user.uid.slice(0, 4)}`,
+            name: user.displayName || `Guest ${user.uid.slice(0, 4)}`,
             avatarSeed: user.photoURL || user.uid,
             rankedStats: { wins: 0, losses: 0, elo: 1000, streak: 0 },
             casualStats: { wins: 0, losses: 0, streak: 0 },
