@@ -184,10 +184,6 @@ export interface GameLevel {
   opponentElo?: number;    // Elo of the enemy (controls AI difficulty)
   mapThemeIndex?: number;  // Specific visual theme (0-11)
   isRanked?: boolean;      // True if Ranked match
-  
-  // New for Firebase
-  onlineRoomId?: string;
-  myUserId?: string;
 }
 
 // Granular Upgrades
@@ -244,16 +240,12 @@ export interface LobbyRoom {
     id: string;
     name: string;
     host: string;
-    hostId: string; // Firebase UID
     status: 'WAITING' | 'PLAYING';
     players: number; // 1/2 or 2/2
     mapIndex: number;
     hostElo: number;
-    createdAt: number;
-    
-    guestName?: string; 
-    guestId?: string; // Firebase UID
-    guestElo?: number;  
+    guestName?: string; // New: Opponent name
+    guestElo?: number;  // New: Opponent Elo
 }
 
 export type Language = 'VN' | 'EN';
