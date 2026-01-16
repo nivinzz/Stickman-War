@@ -111,10 +111,11 @@ export class GameEngine {
         // Give higher Elo bots a gold advantage instead of just stats
         this.enemyGold = INITIAL_GOLD + Math.floor(elo / 10); 
         
+        // UPDATED TOWER LOGIC for condensed 1-20 Scale
         this.enemyTowers = 0;
-        if (effectiveLevel >= 10) this.enemyTowers = 1;
-        if (effectiveLevel >= 25) this.enemyTowers = 2;
-        if (effectiveLevel >= 45) this.enemyTowers = 3;
+        if (effectiveLevel >= 5) this.enemyTowers = 1;  // Matches Campaign Lvl 5 (Gold)
+        if (effectiveLevel >= 12) this.enemyTowers = 2; // Matches mid-Diamond
+        if (effectiveLevel >= 18) this.enemyTowers = 3; // Matches Challenger/Legend
 
         // Base upgrades on effective level
         const baseAILevel = Math.max(0, Math.floor((effectiveLevel - 3) * 0.5)); 
@@ -131,8 +132,8 @@ export class GameEngine {
             freezePower: Math.floor(baseAILevel * 0.5), 
             heroPower: Math.floor(baseAILevel * 0.5),
             minerSpeed: Math.floor(baseAILevel * 0.8), 
-            maxPopUpgrade: Math.floor(effectiveLevel / 10), 
-            passiveGold: Math.floor(effectiveLevel / 15), 
+            maxPopUpgrade: Math.floor(effectiveLevel / 4), // Scaled for 20 max level
+            passiveGold: Math.floor(effectiveLevel / 5), // Scaled for 20 max level
             towerPower: Math.floor(baseAILevel * 0.5)
         };
 

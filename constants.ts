@@ -102,14 +102,15 @@ export const getRankTier = (elo: number): RankTier => {
 };
 
 // Maps Tier to an equivalent "Offline Level" difficulty
+// UPDATED: Scaled to 1-20 mostly to reflect the prompt
 export const TIER_DIFFICULTY_MAP: Record<RankTier, { minLvl: number, maxLvl: number }> = {
-    [RankTier.BRONZE]: { minLvl: 1, maxLvl: 5 },
-    [RankTier.SILVER]: { minLvl: 6, maxLvl: 10 },
-    [RankTier.GOLD]: { minLvl: 11, maxLvl: 20 },
-    [RankTier.PLATINUM]: { minLvl: 21, maxLvl: 30 },
-    [RankTier.DIAMOND]: { minLvl: 31, maxLvl: 45 },
-    [RankTier.CHALLENGER]: { minLvl: 46, maxLvl: 55 },
-    [RankTier.LEGEND]: { minLvl: 56, maxLvl: 60 },
+    [RankTier.BRONZE]: { minLvl: 1, maxLvl: 3 },
+    [RankTier.SILVER]: { minLvl: 3, maxLvl: 5 },
+    [RankTier.GOLD]: { minLvl: 5, maxLvl: 8 },
+    [RankTier.PLATINUM]: { minLvl: 7, maxLvl: 10 },
+    [RankTier.DIAMOND]: { minLvl: 11, maxLvl: 14 },
+    [RankTier.CHALLENGER]: { minLvl: 15, maxLvl: 18 },
+    [RankTier.LEGEND]: { minLvl: 16, maxLvl: 20 },
 };
 
 // --- STAT CALCULATION HELPER ---
