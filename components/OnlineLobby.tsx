@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { PlayerProfile, Language, RankTier, ChatMessage, LobbyRoom } from '../types';
 import { generateBotNames, LEVEL_THEMES, getRankTier, NAMES_VN, ROOM_NAMES_VN, ROOM_NAMES_EN, getAvatarUrl, CHAT_TEMPLATES_VN, CHAT_TEMPLATES_EN, CHAT_TOPICS } from '../constants';
@@ -217,17 +218,10 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
              const startElo = 100;
              const newProfile: PlayerProfile = { 
                 name: currentName,
-<<<<<<< HEAD
                 avatarSeed: currentName,
                 rankedStats: { wins: 0, losses: 0, elo: startElo, streak: 0 },
                 casualStats: { wins: 0, losses: 0, streak: 0 },
                 rankTier: getRankTier(startElo),
-=======
-                avatarSeed: currentName, // Default seed
-                rankedStats: { wins: 21, losses: 0, elo: 1070, streak: 21 },
-                casualStats: { wins: 0, losses: 0, streak: 0 },
-                rankTier: getRankTier(1070),
->>>>>>> 7233de743b9067493cec00e50f2029fc34788733
                 status: 'IDLE' 
             };
             fakeLb.push(newProfile);
@@ -242,7 +236,6 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
     leaderboardRef.current = fakeLb;
     localStorage.setItem(STORAGE_KEY_BOTS_DATA, JSON.stringify(fakeLb));
 
-<<<<<<< HEAD
     // 5. START SIMULATION LOOPS
     const botSim = setInterval(runBotSimulation, 2000); // 2s tick for Rank Battles
     const chatSim = setInterval(runChatSimulation, 1500); // 1.5s tick for Chat
@@ -252,11 +245,6 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
     if (botRooms.length < 20) {
         runRoomSimulation(); 
     }
-=======
-    const interval = setInterval(runBotSimulation, 5000); 
-    const chatInterval = setInterval(runChatSimulation, 1500); // Fast chat (1.2s)
-    const roomInterval = setInterval(runRoomSimulation, 4000); 
->>>>>>> 7233de743b9067493cec00e50f2029fc34788733
 
     return () => {
         clearInterval(botSim);
@@ -463,6 +451,14 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
               localStorage.setItem(STORAGE_KEY_BOTS_DATA, JSON.stringify(lb));
           }
           setView('HOME');
+      }
+  };
+
+  const handleLogout = () => {
+      if (window.confirm("Bạn có chắc muốn đăng xuất và đổi tên không?")) {
+          localStorage.removeItem(STORAGE_KEY_PLAYER_NAME);
+          setPlayerName('');
+          setView('LOGIN');
       }
   };
 
@@ -819,10 +815,9 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
             </div>
             
             <div 
-                className="flex items-center gap-4 cursor-pointer hover:bg-slate-700 px-2 py-1 rounded transition-all group" 
-                onClick={() => myProfile && setSelectedProfile(myProfile)}
+                className="flex items-center gap-4 px-2 py-1 rounded transition-all group" 
             >
-                <div className="flex flex-col items-end">
+                <div className="flex flex-col items-end cursor-pointer" onClick={() => myProfile && setSelectedProfile(myProfile)}>
                     <div className="flex items-center gap-2">
                         {myRankForBar && getSenderBadge(myRankForBar <= 100 ? myRankForBar : undefined)}
                         <span className="font-bold text-white text-lg tracking-wide">{playerName}</span>
@@ -832,15 +827,27 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                         <span className="text-[10px] text-blue-300 uppercase font-bold tracking-widest">{myProfile?.rankedStats.elo || 100} ELO</span>
                     </div>
                 </div>
-                <div 
-                    className="w-10 h-10 rounded-full border-2 border-blue-500 group-hover:border-white transition-colors overflow-hidden bg-slate-900 relative"
-                    onClick={(e) => { e.stopPropagation(); setIsAvatarModalOpen(true); }}
-                    title="Change Avatar"
-                >
-                    <img src={getAvatarUrl(myProfile?.avatarSeed || playerName)} alt="Me" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span className="text-xs">✎</span>
+                
+                {/* MY MINI AVATAR + CONTROLS */}
+                <div className="relative">
+                    <div 
+                        className="w-10 h-10 rounded-full border-2 border-blue-500 cursor-pointer overflow-hidden bg-slate-900 relative group-hover:border-white transition-colors"
+                        onClick={(e) => { e.stopPropagation(); setIsAvatarModalOpen(true); }}
+                        title="Change Avatar"
+                    >
+                        <img src={getAvatarUrl(myProfile?.avatarSeed || playerName)} alt="Me" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                            <span className="text-xs">✎</span>
+                        </div>
                     </div>
+                    {/* LOGOUT BUTTON */}
+                    <button 
+                        onClick={handleLogout}
+                        className="absolute -bottom-2 -right-2 bg-red-600 hover:bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] border border-slate-800 shadow-md z-10"
+                        title="Logout / Change Name"
+                    >
+                        ✕
+                    </button>
                 </div>
             </div>
         </div>
