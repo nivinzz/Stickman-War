@@ -187,9 +187,9 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
         try { fakeLb = JSON.parse(savedLb); } catch (e) { fakeLb = []; }
     } 
     
-    // INCREASED BOT COUNT TO 1500
-    if (fakeLb.length < 1500) {
-        const generatedNames = generateBotNames(1500);
+    // INCREASED BOT COUNT TO 3000
+    if (fakeLb.length < 3000) {
+        const generatedNames = generateBotNames(3000);
         fakeLb = generatedNames.map(name => {
             const r = Math.random();
             let baseElo = Math.floor(r < 0.4 ? Math.random() * 250 : r < 0.7 ? 250 + Math.random() * 300 : r < 0.85 ? 550 + Math.random() * 350 : r < 0.95 ? 900 + Math.random() * 400 : 1300 + Math.random() * 1000);
@@ -244,7 +244,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
     leaderboardRef.current = fakeLb;
 
     const interval = setInterval(runBotSimulation, 5000); 
-    const chatInterval = setInterval(runChatSimulation, 3500); // Slower to let chat read better 
+    const chatInterval = setInterval(runChatSimulation, 1200); // Fast chat (1.2s)
     const roomInterval = setInterval(runRoomSimulation, 4000); 
 
     return () => {
@@ -286,7 +286,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
 
   // --- SMART CHAT SYSTEM ---
   const runChatSimulation = () => {
-      if (Math.random() > 0.5) return; // Not too spammy
+      // Much higher chance to chat for busy server feel
+      if (Math.random() > 0.9) return; 
       
       const lb = leaderboardRef.current;
       const history = chatHistory;
@@ -407,8 +408,8 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
               return room;
           });
 
-          // Target ~80 Bot Rooms. 
-          const MAX_BOT_ROOMS = 80;
+          // Target ~150 Bot Rooms for a crowded look
+          const MAX_BOT_ROOMS = 150;
           
           if (next.length < MAX_BOT_ROOMS && leaderboardRef.current.length > 0) {
               // Explicit cast to PlayerProfile
@@ -1096,7 +1097,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
             <div className="w-72 bg-slate-800 border-l border-slate-700 flex flex-col">
                 <div className="flex border-b border-slate-700">
                     <button onClick={() => setActiveTab('CHAT')} className={`flex-1 py-3 text-xs font-bold ${activeTab === 'CHAT' ? 'bg-slate-700 text-white border-b-2 border-blue-500' : 'text-slate-400 hover:bg-slate-700/50'}`}>CHAT</button>
-                    <button onClick={() => setActiveTab('ONLINE')} className={`flex-1 py-3 text-xs font-bold ${activeTab === 'ONLINE' ? 'bg-slate-700 text-white border-b-2 border-blue-500' : 'text-slate-400 hover:bg-slate-700/50'}`}>ONLINE (1500+)</button>
+                    <button onClick={() => setActiveTab('ONLINE')} className={`flex-1 py-3 text-xs font-bold ${activeTab === 'ONLINE' ? 'bg-slate-700 text-white border-b-2 border-blue-500' : 'text-slate-400 hover:bg-slate-700/50'}`}>ONLINE (3000+)</button>
                     <button onClick={() => setActiveTab('LEADERBOARD')} className={`flex-1 py-3 text-xs font-bold ${activeTab === 'LEADERBOARD' ? 'bg-slate-700 text-white border-b-2 border-blue-500' : 'text-slate-400 hover:bg-slate-700/50'}`}>TOP</button>
                 </div>
 

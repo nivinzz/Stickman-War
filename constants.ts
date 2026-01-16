@@ -108,9 +108,9 @@ export const TIER_DIFFICULTY_MAP: Record<RankTier, { minLvl: number, maxLvl: num
     [RankTier.SILVER]: { minLvl: 3, maxLvl: 5 },
     [RankTier.GOLD]: { minLvl: 5, maxLvl: 8 },
     [RankTier.PLATINUM]: { minLvl: 7, maxLvl: 10 },
-    [RankTier.DIAMOND]: { minLvl: 11, maxLvl: 14 },
-    [RankTier.CHALLENGER]: { minLvl: 15, maxLvl: 18 },
-    [RankTier.LEGEND]: { minLvl: 16, maxLvl: 20 },
+    [RankTier.DIAMOND]: { minLvl: 11, maxLvl: 13 }, // Updated
+    [RankTier.CHALLENGER]: { minLvl: 14, maxLvl: 16 }, // Updated
+    [RankTier.LEGEND]: { minLvl: 17, maxLvl: 20 }, // Updated
 };
 
 // --- STAT CALCULATION HELPER ---
