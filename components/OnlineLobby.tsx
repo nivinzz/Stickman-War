@@ -129,6 +129,9 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
   const leaderboardRef = useRef<PlayerProfile[]>([]);
   const currentPlayerNameRef = useRef<string>('');
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  
+  // NEW: Track when a bot last fought to control frequency
+  const botLastBattleTime = useRef<Record<string, number>>({});
 
   // Initialize 500 Avatar Seeds
   if (avatarSeeds.current.length === 0) {
@@ -237,11 +240,11 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
     localStorage.setItem(STORAGE_KEY_BOTS_DATA, JSON.stringify(fakeLb));
 
     // 5. START SIMULATION LOOPS
-    const botSim = setInterval(runBotSimulation, 2000); // 2s tick for Rank Battles
+    const botSim = setInterval(runBotSimulation, 5000); // Run check every 5s (but cooldowns determine actual fights)
     const chatSim = setInterval(runChatSimulation, 1500); // 1.5s tick for Chat
     const roomSim = setInterval(runRoomSimulation, 3000); // 3s tick for Room Gen
 
-    // Instant Room Generation on Load if empty (So user sees rooms immediately)
+    // Instant Room Generation on Load if empty
     if (botRooms.length < 20) {
         runRoomSimulation(); 
     }
@@ -259,61 +262,104 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
       }
   }, [chatHistory, activeTab]);
 
-  // --- TIERED BOT SIMULATION LOGIC ---
+  // --- REFINED TIERED BOT SIMULATION LOGIC ---
   const runBotSimulation = () => {
       let lb: PlayerProfile[] = [...leaderboardRef.current];
+      const now = Date.now();
+      let hasChanges = false;
+
+      // Group definitions based on index
+      // Top 1-20: Index 0-19
+      // Top 21-50: Index 20-49
+      // Top 51-100: Index 50-99
+      // Top 101-300: Index 100-299
       
-      // GROUP 1: TOP 300 (The Elites) - Fight constantly, Rank fluctuates heavily
-      // 50 battles per tick for Top 300
-      for(let i=0; i < 50; i++) {
-          const idx1 = Math.floor(Math.random() * 300);
-          const idx2 = Math.floor(Math.random() * 300);
-          simulateBattle(lb, idx1, idx2);
-      }
+      const checkAndBattle = (idx: number, cooldownMs: number, targetPoolRange: number) => {
+          const bot = lb[idx];
+          if (!bot) return;
+          if (bot.name === currentPlayerNameRef.current) return; // Don't sim player
 
-      // GROUP 2: RANK 301-800 (Mid Tier) - Fight less often
-      // 20 battles per tick
+          const lastFight = botLastBattleTime.current[bot.name] || 0;
+          if (now - lastFight > cooldownMs) {
+              // Time to fight!
+              
+              // Determine Opponent Index
+              // The opponent can be anywhere in the targetPoolRange (e.g., Top 20 can fight anyone in Top 200)
+              let oppIdx = Math.floor(Math.random() * targetPoolRange);
+              // Avoid self
+              if (oppIdx === idx) oppIdx = idx + 1;
+              
+              const opponent = lb[oppIdx];
+              if (opponent && opponent.name !== currentPlayerNameRef.current) {
+                  simulateBattle(bot, opponent);
+                  // Update Timestamps
+                  botLastBattleTime.current[bot.name] = now;
+                  botLastBattleTime.current[opponent.name] = now;
+                  hasChanges = true;
+              }
+          }
+      };
+
+      // 1. TOP 1-20 (5 Mins Cooldown, Target Top 200)
       for(let i=0; i < 20; i++) {
-          const idx1 = 300 + Math.floor(Math.random() * 500);
-          const idx2 = 300 + Math.floor(Math.random() * 500);
-          simulateBattle(lb, idx1, idx2);
+          checkAndBattle(i, 5 * 60 * 1000, 200);
       }
 
-      // GROUP 3: RANK 801+ (Casuals) - Rarely fight Rank, mostly do Rooms (Handled in runRoomSimulation)
-      // Just 5 random low tier battles to keep bottom moving slightly
-      for(let i=0; i < 5; i++) {
-          const idx1 = 800 + Math.floor(Math.random() * (lb.length - 800));
-          const idx2 = 800 + Math.floor(Math.random() * (lb.length - 800));
-          simulateBattle(lb, idx1, idx2);
+      // 2. TOP 21-50 (3 Mins Cooldown, Target Top 300)
+      for(let i=20; i < 50; i++) {
+          checkAndBattle(i, 3 * 60 * 1000, 300);
       }
 
-      // RE-SORT & SAVE
-      lb.sort((a, b) => b.rankedStats.elo - a.rankedStats.elo);
-      leaderboardRef.current = lb;
-      setLeaderboard([...lb]); // Trigger UI Update
-      // Save occasionally, not every tick to save performance, or save on exit
+      // 3. TOP 51-100 (2 Mins Cooldown, Target Top 300)
+      for(let i=50; i < 100; i++) {
+          checkAndBattle(i, 2 * 60 * 1000, 300);
+      }
+
+      // 4. TOP 101-300 (1 Min Cooldown, Target Top 400)
+      for(let i=100; i < 300; i++) {
+          checkAndBattle(i, 1 * 60 * 1000, 400);
+      }
+
+      if (hasChanges) {
+          // RE-SORT & SAVE
+          lb.sort((a, b) => b.rankedStats.elo - a.rankedStats.elo);
+          leaderboardRef.current = lb;
+          setLeaderboard([...lb]); 
+      }
   };
 
-  const simulateBattle = (lb: PlayerProfile[], idx1: number, idx2: number) => {
-      if (idx1 === idx2 || !lb[idx1] || !lb[idx2]) return;
-      if (lb[idx1].name === currentPlayerNameRef.current || lb[idx2].name === currentPlayerNameRef.current) return;
-
-      const p1 = lb[idx1];
-      const p2 = lb[idx2];
-
+  const simulateBattle = (p1: PlayerProfile, p2: PlayerProfile) => {
       const eloDiff = p2.rankedStats.elo - p1.rankedStats.elo;
+      // Win Probability P1 = 1 / (1 + 10^(diff/400))
       const expectedScoreP1 = 1 / (1 + Math.pow(10, eloDiff / 400));
       
-      // Underdog has chance (15% random upset factor)
-      const p1Wins = Math.random() < expectedScoreP1 || Math.random() < 0.15;
+      // Determine outcome with Luck Factor
+      // Higher Elo means higher expectedScore, but we roll a die.
+      // Luck Buffer: Even if 90% win rate, there's a 10% chance + random chaos.
+      let roll = Math.random();
+      
+      // Upsets happen more often in this game (it's chaos)
+      // If P1 is favorite (prob > 0.5), they need to roll < prob.
+      // But we cap probability at 0.85 to ensure 15% upset chance always.
+      const cappedProb = Math.min(0.85, Math.max(0.15, expectedScoreP1));
+      
+      const p1Wins = roll < cappedProb;
 
       const winner = p1Wins ? p1 : p2;
       const loser = p1Wins ? p2 : p1;
 
-      const K = 32;
-      const prob = p1Wins ? expectedScoreP1 : (1 - expectedScoreP1);
-      const gain = Math.max(10, Math.floor(K * (1 - prob)));
+      // K-Factor (Volatility)
+      // Top ranks have lower K to prevent wild swings. Lower ranks climb faster.
+      let K = 32;
+      if (winner.rankedStats.elo > 2000) K = 15;
+      else if (winner.rankedStats.elo > 1000) K = 24;
 
+      const actualScore = p1Wins ? 1 : 0;
+      const eloChange = Math.round(K * (actualScore - expectedScoreP1));
+      
+      // Apply Elo (Ensure at least +/- 1 and don't drop below 0)
+      const gain = Math.abs(eloChange) || 1;
+      
       winner.rankedStats.elo += gain;
       winner.rankedStats.wins++;
       winner.rankTier = getRankTier(winner.rankedStats.elo);
