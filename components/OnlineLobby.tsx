@@ -217,10 +217,17 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
              const startElo = 100;
              const newProfile: PlayerProfile = { 
                 name: currentName,
+<<<<<<< HEAD
                 avatarSeed: currentName,
                 rankedStats: { wins: 0, losses: 0, elo: startElo, streak: 0 },
                 casualStats: { wins: 0, losses: 0, streak: 0 },
                 rankTier: getRankTier(startElo),
+=======
+                avatarSeed: currentName, // Default seed
+                rankedStats: { wins: 21, losses: 0, elo: 1070, streak: 21 },
+                casualStats: { wins: 0, losses: 0, streak: 0 },
+                rankTier: getRankTier(1070),
+>>>>>>> 7233de743b9067493cec00e50f2029fc34788733
                 status: 'IDLE' 
             };
             fakeLb.push(newProfile);
@@ -235,6 +242,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
     leaderboardRef.current = fakeLb;
     localStorage.setItem(STORAGE_KEY_BOTS_DATA, JSON.stringify(fakeLb));
 
+<<<<<<< HEAD
     // 5. START SIMULATION LOOPS
     const botSim = setInterval(runBotSimulation, 2000); // 2s tick for Rank Battles
     const chatSim = setInterval(runChatSimulation, 1500); // 1.5s tick for Chat
@@ -244,6 +252,11 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
     if (botRooms.length < 20) {
         runRoomSimulation(); 
     }
+=======
+    const interval = setInterval(runBotSimulation, 5000); 
+    const chatInterval = setInterval(runChatSimulation, 1500); // Fast chat (1.2s)
+    const roomInterval = setInterval(runRoomSimulation, 4000); 
+>>>>>>> 7233de743b9067493cec00e50f2029fc34788733
 
     return () => {
         clearInterval(botSim);
