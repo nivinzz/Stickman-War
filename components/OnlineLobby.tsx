@@ -734,31 +734,48 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
       if (!isAvatarModalOpen) return null;
       return (
           <div className="absolute inset-0 z-[70] bg-black/90 flex flex-col items-center justify-center p-4">
-              <div className="w-full max-w-3xl bg-slate-800 rounded-xl border border-slate-600 shadow-2xl flex flex-col max-h-[80vh]">
-                  <div className="p-4 border-b border-slate-700 flex justify-between items-center">
-                      <h3 className="font-bold text-white text-xl">CHOOSE AVATAR</h3>
+              <div className="w-full max-w-4xl bg-slate-900 rounded-xl border border-slate-600 shadow-2xl flex flex-col h-[80vh]">
+                  <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800 rounded-t-xl">
+                      <div>
+                          <h3 className="font-black text-white text-xl tracking-wider">CHOOSE AVATAR</h3>
+                          <p className="text-xs text-slate-400">Select an icon to represent you in battle</p>
+                      </div>
                       <button onClick={() => setIsAvatarModalOpen(false)} className="text-slate-400 hover:text-white text-2xl">✕</button>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-4 grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4 custom-scrollbar">
-                      {avatarSeeds.current.map((seed, i) => (
-                          <div 
-                            key={i} 
-                            onClick={() => {
-                                // Update my avatar
-                                const updatedLb = leaderboard.map(p => {
-                                    if (p.name === playerName) return { ...p, avatarSeed: seed };
-                                    return p;
-                                });
-                                setLeaderboard(updatedLb);
-                                leaderboardRef.current = updatedLb;
-                                localStorage.setItem(STORAGE_KEY_BOTS_DATA, JSON.stringify(updatedLb));
-                                setIsAvatarModalOpen(false);
-                            }}
-                            className="aspect-square bg-slate-700 rounded-lg overflow-hidden border-2 border-transparent hover:border-blue-500 cursor-pointer hover:scale-105 transition-all"
-                          >
-                              <img src={getAvatarUrl(seed)} loading="lazy" className="w-full h-full object-cover" />
-                          </div>
-                      ))}
+                  
+                  {/* Avatar Grid: Wider, Scrollable */}
+                  <div className="flex-1 overflow-y-auto p-6 bg-slate-900/50">
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
+                          {avatarSeeds.current.map((seed, i) => (
+                              <div 
+                                key={i} 
+                                onClick={() => {
+                                    const updatedLb = leaderboard.map(p => {
+                                        if (p.name === playerName) return { ...p, avatarSeed: seed };
+                                        return p;
+                                    });
+                                    setLeaderboard(updatedLb);
+                                    leaderboardRef.current = updatedLb;
+                                    localStorage.setItem(STORAGE_KEY_BOTS_DATA, JSON.stringify(updatedLb));
+                                    setIsAvatarModalOpen(false);
+                                }}
+                                className={`aspect-square bg-slate-800 rounded-xl overflow-hidden border-2 cursor-pointer transition-all relative group
+                                    ${myProfile?.avatarSeed === seed ? 'border-green-500 shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'border-slate-700 hover:border-blue-500 hover:scale-105'}`}
+                              >
+                                  <img src={getAvatarUrl(seed)} loading="lazy" className="w-full h-full object-cover" />
+                                  
+                                  {/* Selection Checkmark */}
+                                  {myProfile?.avatarSeed === seed && (
+                                      <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
+                                          <div className="bg-green-500 rounded-full w-8 h-8 flex items-center justify-center border-2 border-white text-white font-bold">✓</div>
+                                      </div>
+                                  )}
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+                  <div className="p-2 border-t border-slate-700 bg-slate-800 text-center text-xs text-slate-500 rounded-b-xl">
+                      Scroll down for more avatars
                   </div>
               </div>
           </div>
@@ -900,63 +917,75 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
             </div>
 
             {/* CENTER: CUSTOM ROOM LIST OR ACTIVE VIEW (50%) */}
-            <div className="flex-1 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-slate-900 relative flex flex-col">
+            <div className="flex-1 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-slate-900 relative flex flex-col overflow-hidden">
                 {view === 'HOME' && (
                     <>
-                        <div className="p-3 bg-slate-800/80 border-b border-slate-700 flex justify-between items-center backdrop-blur-sm">
+                        <div className="p-3 bg-slate-800/80 border-b border-slate-700 flex justify-between items-center backdrop-blur-sm sticky top-0 z-20">
                             <span className="font-bold text-white">LOBBY ROOMS ({displayRooms.length})</span>
                             <div className="text-xs text-slate-400 flex gap-4">
                                 <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500"></div> WAITING</span>
                                 <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500"></div> PLAYING</span>
                             </div>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 content-start custom-scrollbar">
-                            {displayRooms.map(room => (
-                                <div key={room.id} className={`bg-slate-800 border rounded-lg p-2 transition-all shadow flex flex-col gap-1 relative overflow-hidden group ${room.status === 'PLAYING' ? 'border-red-500/30' : 'border-slate-600 hover:border-blue-500'}`}>
-                                    <div className={`absolute top-0 left-0 w-0.5 h-full ${room.status === 'WAITING' ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                                    <div className="flex justify-between items-start pl-1">
-                                        <div className="flex-1 min-w-0">
-                                            <div className="font-bold text-white text-[10px] truncate">{room.name}</div>
-                                            
-                                            {room.status === 'PLAYING' && room.guestName ? (
-                                                <div className="text-[9px] text-slate-300 mt-0.5 bg-black/30 p-0.5 rounded border border-slate-700">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-blue-400 truncate w-14">{room.host}</span>
-                                                        <span className="text-[8px] text-yellow-500 font-mono">{room.hostElo}</span>
+                        {/* Improved Grid and Scrolling */}
+                        <div className="flex-1 overflow-y-auto p-4 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pb-20">
+                                {displayRooms.map(room => (
+                                    <div key={room.id} className={`bg-slate-800 border rounded-lg p-3 transition-all shadow-lg flex flex-col gap-2 relative overflow-hidden group 
+                                        ${room.status === 'PLAYING' ? 'border-red-500/30 bg-slate-900/50' : 'border-slate-600 hover:border-blue-500 hover:bg-slate-700'}`}>
+                                        
+                                        <div className={`absolute top-0 left-0 w-1 h-full ${room.status === 'WAITING' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                        
+                                        <div className="flex justify-between items-start pl-2">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="font-bold text-white text-sm truncate" title={room.name}>{room.name}</div>
+                                                
+                                                {room.status === 'PLAYING' && room.guestName ? (
+                                                    <div className="text-xs text-slate-300 mt-1 bg-black/40 p-1.5 rounded border border-slate-700/50">
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-blue-400 truncate w-20">{room.host}</span>
+                                                            <span className="text-[10px] text-yellow-500 font-mono">{room.hostElo}</span>
+                                                        </div>
+                                                        <div className="text-[9px] text-center font-bold text-red-500 italic scale-75 my-0.5">VS</div>
+                                                        <div className="flex justify-between items-center">
+                                                            <span className="text-red-400 truncate w-20">{room.guestName}</span>
+                                                            <span className="text-[10px] text-yellow-500 font-mono">{room.guestElo}</span>
+                                                        </div>
                                                     </div>
-                                                    <div className="text-[8px] text-center font-bold text-red-500 italic scale-75">VS</div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-red-400 truncate w-14">{room.guestName}</span>
-                                                        <span className="text-[8px] text-yellow-500 font-mono">{room.guestElo}</span>
+                                                ) : (
+                                                    <div className="text-xs text-slate-400 mt-1 truncate">
+                                                        Host: <span className="text-white font-bold">{room.host}</span> <span className="text-yellow-500 font-mono">({room.hostElo})</span>
                                                     </div>
+                                                )}
+                                            </div>
+                                            <div className="flex flex-col items-end pl-2">
+                                                 <div className={`px-2 py-0.5 rounded text-[10px] font-mono border font-bold
+                                                    ${room.players === 2 ? 'bg-red-900/50 border-red-800 text-red-400' : 'bg-green-900/50 border-green-800 text-green-400'}`}>
+                                                    {room.players}/2
                                                 </div>
-                                            ) : (
-                                                <div className="text-[9px] text-slate-400 mt-0.5 truncate">
-                                                    Host: {room.host} <span className="text-yellow-500">({room.hostElo})</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="flex flex-col items-end pl-1">
-                                             <div className="bg-slate-900 px-1 py-0.5 rounded text-[9px] font-mono border border-slate-700">
-                                                {room.players}/2
                                             </div>
                                         </div>
+                                        
+                                        <div className="flex justify-between items-center pl-2 mt-auto border-t border-slate-700/50 pt-2">
+                                            <div className="text-[10px] text-slate-500 uppercase font-bold truncate max-w-[100px] flex items-center gap-1">
+                                                <span>🗺️</span> {LEVEL_THEMES[room.mapIndex].nameEn}
+                                            </div>
+                                            {room.status === 'WAITING' ? (
+                                                <button 
+                                                    onClick={() => handleJoinRoom(room)} 
+                                                    className="px-4 py-1 bg-green-600 hover:bg-green-500 text-white text-xs font-bold rounded shadow cursor-pointer transition-colors"
+                                                >
+                                                    JOIN
+                                                </button>
+                                            ) : (
+                                                <button className="px-3 py-1 bg-slate-800 text-red-500 text-[10px] font-bold rounded cursor-not-allowed border border-red-900/20 opacity-70">
+                                                    PLAYING
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div className="flex justify-between items-center pl-1 mt-0.5">
-                                        <div className="text-[8px] text-slate-500 uppercase font-bold truncate max-w-[60px]">{LEVEL_THEMES[room.mapIndex].nameEn}</div>
-                                        {room.status === 'WAITING' ? (
-                                            <button 
-                                                onClick={() => handleJoinRoom(room)} 
-                                                className="px-2 py-0.5 bg-green-600 hover:bg-green-500 text-white text-[9px] font-bold rounded shadow cursor-pointer"
-                                            >
-                                                JOIN
-                                            </button>
-                                        ) : (
-                                            <button className="px-2 py-0.5 bg-slate-700 text-red-400 text-[9px] font-bold rounded cursor-not-allowed border border-red-900/30 opacity-70">PLAYING</button>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
                         </div>
                     </>
                 )}
