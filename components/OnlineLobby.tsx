@@ -224,9 +224,9 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
              const newProfile: PlayerProfile = { 
                 name: currentName,
                 avatarSeed: currentName, // Default seed
-                rankedStats: { wins: 0, losses: 0, elo: 100, streak: 0 },
+                rankedStats: { wins: 21, losses: 0, elo: 1070, streak: 21 },
                 casualStats: { wins: 0, losses: 0, streak: 0 },
-                rankTier: RankTier.BRONZE, 
+                rankTier: getRankTier(1070),
                 status: 'IDLE' 
             };
             fakeLb.unshift(newProfile);
@@ -244,7 +244,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
     leaderboardRef.current = fakeLb;
 
     const interval = setInterval(runBotSimulation, 5000); 
-    const chatInterval = setInterval(runChatSimulation, 1200); // Fast chat (1.2s)
+    const chatInterval = setInterval(runChatSimulation, 1500); // Fast chat (1.2s)
     const roomInterval = setInterval(runRoomSimulation, 4000); 
 
     return () => {
