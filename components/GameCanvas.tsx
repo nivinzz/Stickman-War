@@ -182,12 +182,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
       engine.envElements.forEach(e => {
           if (e.type === 'TREE') {
               ctx.save();
-              // Adjust Y for Hills/Swamp visual offset
-              let yOffset = 0;
-              if (e.x > 800 && e.x < 1600) yOffset = -25; // Hill tree higher
-              if (e.x > 1600 && e.x < 2400) yOffset = 10; // Swamp tree lower
-              
-              ctx.translate(e.x, e.y + yOffset);
+              ctx.translate(e.x, e.y);
               ctx.scale(e.scale, e.scale);
               if (biome === 2 || biome === 9) drawCactus(ctx, e.scale, e.variant);
               else if (biome === 3 || biome === 10) drawTreePine(ctx, e.scale, e.variant);
@@ -250,13 +245,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
   };
 
   const drawFlag = (ctx: CanvasRenderingContext2D, x: number, color: 'RED' | 'BLUE' | 'GREEN') => {
-      // Adjust flag height based on terrain
-      let yOffset = 0;
-      if (x > 800 && x < 1600) yOffset = -30; // Hill
-      if (x > 1600 && x < 2400) yOffset = 10; // Swamp
-
       ctx.save();
-      ctx.translate(x, GROUND_Y + yOffset);
+      ctx.translate(x, GROUND_Y);
       const strokeColor = color === 'RED' ? 'rgba(239, 68, 68, 0.5)' : (color === 'BLUE' ? 'rgba(59, 130, 246, 0.5)' : 'rgba(34, 197, 94, 0.5)');
       const fillColor = color === 'RED' ? '#ef4444' : (color === 'BLUE' ? '#3b82f6' : '#22c55e');
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
@@ -321,22 +311,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
     const color = isPlayer ? '#4ade80' : '#f87171';
     const height = unit.height;
     
-    // VISUAL TERRAIN OFFSET FOR UNITS
-    let yOffset = 0;
-    // Hill Zone (800-1600): Bump up units
-    if (unit.x > 800 && unit.x < 1600) {
-        // Create a fake hill shape curve
-        const relX = unit.x - 800; // 0 to 800
-        const sineH = Math.sin((relX / 800) * Math.PI) * 30; // Max height 30px
-        yOffset = -sineH;
-    }
-    // Swamp Zone (1600-2400): Sink units slightly
-    if (unit.x > 1600 && unit.x < 2400) {
-        yOffset = 5; // Sink into mud
-    }
-
     ctx.save();
-    ctx.translate(unit.x, unit.y + yOffset);
+    ctx.translate(unit.x, unit.y);
     const baseHeight = unit.type === UnitType.HERO ? 60 : 40;
     const scale = unit.height / baseHeight;
     const xFlip = !isPlayer ? -1 : 1;
@@ -635,6 +611,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
     ctx.save(); ctx.fill(); ctx.clip(); 
 
     // 3. Static Details (Clipped to Mountain)
+    // REMOVED VINES LOGIC HERE
+    
     // Snow Caps
     if (biome === 3 || biome === 10) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, WORLD_WIDTH, GROUND_Y - 250); }
 
@@ -645,58 +623,30 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ engine, targetingSkill, onSkill
     }
     ctx.restore(); 
     
-    // 4. TERRAIN GROUND (Draw ground in segments)
-    
-    // -- Zone 1: Player Plains (0 - 800)
+    // 4. Static Ground
     const groundGrad = ctx.createLinearGradient(0, GROUND_Y, 0, CANVAS_HEIGHT);
     groundGrad.addColorStop(0, theme.groundColor);
     groundGrad.addColorStop(1, '#0f172a'); 
     ctx.fillStyle = groundGrad;
-    ctx.fillRect(0, GROUND_Y, 800, CANVAS_HEIGHT - GROUND_Y);
-    
-    // -- Zone 2: Hills (800 - 1600) (Bump Up)
-    // Draw a big sine wave hill shape
-    ctx.beginPath();
-    ctx.moveTo(800, GROUND_Y);
-    for(let x=800; x<=1600; x+=10) {
-        const relX = x - 800; // 0 to 800
-        const sineH = Math.sin((relX / 800) * Math.PI) * 30; // Max height 30px
-        ctx.lineTo(x, GROUND_Y - sineH);
+    ctx.fillRect(0, GROUND_Y, WORLD_WIDTH, CANVAS_HEIGHT - GROUND_Y);
+
+    // River (Static Shape)
+    if (biome === 0) {
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.moveTo(0, GROUND_Y + 40);
+        for(let x=0; x<=WORLD_WIDTH; x+=50) { ctx.lineTo(x, GROUND_Y + 40 + Math.sin(x * 0.01) * 15); }
+        ctx.lineTo(WORLD_WIDTH, GROUND_Y + 80);
+        for(let x=WORLD_WIDTH; x>=0; x-=50) { ctx.lineTo(x, GROUND_Y + 80 + Math.sin(x * 0.01) * 15); }
+        ctx.fill();
     }
-    ctx.lineTo(1600, CANVAS_HEIGHT);
-    ctx.lineTo(800, CANVAS_HEIGHT);
-    ctx.closePath();
-    ctx.fillStyle = '#57534e'; // Rocky Hill Color
-    ctx.fill();
-    // Fill bottom
-    ctx.fillRect(800, GROUND_Y, 800, CANVAS_HEIGHT-GROUND_Y);
-
-    // -- Zone 3: Swamp (1600 - 2400) (Dip/Flat)
-    ctx.fillStyle = '#27272a'; // Muddy dark color
-    ctx.fillRect(1600, GROUND_Y, 800, CANVAS_HEIGHT - GROUND_Y);
-    // Draw bubbles
-    ctx.fillStyle = '#10b981'; // Green slime bubbles
-    if (engine.frame % 60 === 0) { // Static for performance, but randomized
-       for(let i=0; i<5; i++) {
-           const bx = 1600 + Math.random() * 800;
-           const by = GROUND_Y + Math.random() * 20;
-           ctx.beginPath(); ctx.arc(bx, by, 3, 0, Math.PI*2); ctx.fill();
-       }
-    }
-
-    // -- Zone 4: Enemy Plains (2400 - 3200)
-    ctx.fillStyle = groundGrad;
-    ctx.fillRect(2400, GROUND_Y, 800, CANVAS_HEIGHT - GROUND_Y);
-
-    // Cracks (Static Lines) - Only in Plains
+    // Cracks (Static Lines)
     if (biome === 2 || biome === 5 || biome === 11) {
         ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 2;
         staticBg.cracks.forEach(crack => {
-            if (crack.x < 800 || crack.x > 2400) {
-                ctx.beginPath(); ctx.moveTo(crack.x, crack.y);
-                crack.path.forEach(p => ctx.lineTo(crack.x + p.x, crack.y + p.y));
-                ctx.stroke();
-            }
+            ctx.beginPath(); ctx.moveTo(crack.x, crack.y);
+            crack.path.forEach(p => ctx.lineTo(crack.x + p.x, crack.y + p.y));
+            ctx.stroke();
         });
     }
     

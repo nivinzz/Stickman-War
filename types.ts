@@ -1,121 +1,81 @@
 
 export enum UnitType {
-    MINER = 'MINER',
-    SWORDMAN = 'SWORDMAN',
-    ARCHER = 'ARCHER',
-    CAVALRY = 'CAVALRY',
-    HERO = 'HERO'
+  MINER = 'MINER',
+  SWORDMAN = 'SWORDMAN',
+  ARCHER = 'ARCHER',
+  CAVALRY = 'CAVALRY',
+  HERO = 'HERO'
 }
 
 export enum Faction {
-    PLAYER = 'PLAYER',
-    ENEMY = 'ENEMY'
+  PLAYER = 'PLAYER',
+  ENEMY = 'ENEMY'
 }
 
 export enum UnitState {
-    IDLE = 'IDLE',
-    MOVE = 'MOVE',
-    ATTACK = 'ATTACK',
-    DIE = 'DIE',
-    DEAD = 'DEAD',
-    MINE_WALK_TO_MINE = 'MINE_WALK_TO_MINE',
-    MINE_GATHERING = 'MINE_GATHERING',
-    MINE_RETURN = 'MINE_RETURN'
-}
-
-export enum TerrainType {
-    PLAINS = 'PLAINS',
-    HILLS = 'HILLS',
-    SWAMP = 'SWAMP'
+  IDLE = 'IDLE',
+  MOVE = 'MOVE',
+  ATTACK = 'ATTACK',
+  MINE_WALK_TO_MINE = 'MINE_WALK_TO_MINE',
+  MINE_GATHERING = 'MINE_GATHERING',
+  MINE_RETURN = 'MINE_RETURN',
+  DIE = 'DIE',     
+  DEAD = 'DEAD',
+  RETREAT = 'RETREAT' // AI Specific state
 }
 
 export enum RankTier {
-    BRONZE = 'BRONZE',
-    SILVER = 'SILVER',
-    GOLD = 'GOLD',
-    PLATINUM = 'PLATINUM',
-    DIAMOND = 'DIAMOND',
-    CHALLENGER = 'CHALLENGER',
-    LEGEND = 'LEGEND'
+  BRONZE = 'BRONZE',
+  SILVER = 'SILVER',
+  GOLD = 'GOLD',
+  PLATINUM = 'PLATINUM',
+  DIAMOND = 'DIAMOND',
+  CHALLENGER = 'CHALLENGER',
+  LEGEND = 'LEGEND'
 }
 
-export type Language = 'VN' | 'EN';
-
 export interface UnitStats {
-    hp: number;
-    maxHp: number;
-    damage: number;
-    range: number;
-    speed: number;
-    attackSpeed: number;
-    cost: number;
-    spawnTime: number;
-    minRange?: number;
+  hp: number;
+  maxHp: number;
+  damage: number;
+  range: number;
+  minRange?: number; // New property for minimum firing distance
+  speed: number;
+  attackSpeed: number; 
+  cost: number;
+  spawnTime: number; // Frames to produce
 }
 
 export interface Unit {
-    id: string;
-    type: UnitType;
-    faction: Faction;
-    x: number;
-    y: number;
-    state: UnitState;
-    stats: UnitStats;
-    lastAttackFrame: number;
-    targetId: string | null;
-    width: number;
-    height: number;
-    animationFrame: number;
-    rotation: number;
-    deathTimer: number;
-    opacity: number;
-    freezeTimer: number;
-    isSlowed: boolean;
-    patrolHeading?: 'A' | 'B';
-    isVanguard?: boolean;
-    miningTimer?: number;
-    goldCarrying?: number;
-}
+  id: string;
+  type: UnitType;
+  faction: Faction;
+  x: number;
+  y: number;
+  state: UnitState;
+  stats: UnitStats;
+  lastAttackFrame: number;
+  targetId: string | null;
+  width: number;
+  height: number;
+  animationFrame: number;
+  
+  miningTimer?: number;
+  goldCarrying?: number;
+  
+  // Patrol State
+  patrolHeading?: 'A' | 'B'; // A = Rally Point (Blue), B = Patrol Point (Red)
+  
+  // Vanguard State
+  isVanguard?: boolean; // If true, follows Green Flag
 
-export interface Projectile {
-    id: string;
-    x: number;
-    y: number;
-    vx: number;
-    vy: number;
-    startX: number;
-    damage: number;
-    faction: Faction;
-    active: boolean;
-    type: 'ARROW' | 'TOWER_SHOT' | 'LIGHTNING_BOLT';
-    rotation: number;
-    targetId?: string | null;
-    fromSkill?: boolean;
-    points?: {x: number, y: number}[];
-    opacity?: number;
-}
+  // Status Effects
+  freezeTimer: number; // Keep for lingering slow if needed
+  isSlowed?: boolean; // New flag for "Shatter" damage bonus
 
-export interface Particle {
-    id: string;
-    x: number;
-    y: number;
-    vx: number;
-    vy: number;
-    life: number;
-    maxLife: number;
-    color: string;
-    size: number;
-    gravity: boolean;
-}
-
-export interface Firework {
-    id: string;
-    x: number;
-    y: number;
-    color: string;
-    particles: Particle[];
-    exploded: boolean;
-    timer: number;
+  rotation: number; 
+  deathTimer: number; 
+  opacity: number;
 }
 
 export interface IceShard {
@@ -132,140 +92,160 @@ export interface Hazard {
     y: number;
     width: number;
     height: number;
-    duration: number;
-    damagePercent: number;
-    explosionDamagePercent?: number;
-    slowFactor: number;
-    faction: Faction;
-    visuals?: IceShard[];
-}
-
-export interface EnvElement {
-    id: string;
-    type: 'CLOUD' | 'TREE' | 'BIRD';
-    x: number;
-    y: number;
-    speed: number;
-    scale: number;
-    variant: number;
-}
-
-export interface GameLevel {
-    level: number;
-    enemySpawnRate: number;
-    enemyStatMultiplier: number;
-    enemySmartAI: boolean;
-    enemyGoldDrip: number;
-    isBoss: boolean;
-    isMultiplayer: boolean;
-    isSpectator: boolean;
-    opponentName?: string;
-    opponentElo?: number;
-    mapThemeIndex: number;
-}
-
-export interface LevelTheme {
-    skyTop: string;
-    skyBottom: string;
-    mountainColor: string;
-    groundColor: string;
-    treeTrunk: string;
-    treeLeaf1: string;
-    treeLeaf2: string;
-    nameEn: string;
-    nameVn: string;
-}
-
-export interface UpgradeState {
-    baseHp: number;
-    swordDamage: number;
-    archerDamage: number;
-    cavalryDamage: number;
-    spawnSpeed: number;
-    arrowRainPower: number;
-    lightningPower: number;
-    freezePower: number;
-    heroPower: number;
-    minerSpeed: number;
-    maxPopUpgrade: number;
-    passiveGold: number;
-    towerPower: number;
+    duration: number; // Frames
+    damagePercent: number; // % Max HP per second (DoT)
+    explosionDamagePercent?: number; // % Max HP on explode
+    slowFactor: number; // Speed multiplier (e.g., 0.5)
+    faction: Faction; // Added to check for friendly fire
+    visuals?: IceShard[]; // Visual data for ice spikes
 }
 
 export interface SpawnQueueItem {
-    id: string;
-    type: UnitType;
-    totalTime: number;
-    remainingTime: number;
-    faction: Faction;
+  id: string;
+  type: UnitType;
+  totalTime: number;
+  remainingTime: number;
+  faction: Faction;
+}
+
+export interface Projectile {
+  id: string;
+  x: number;
+  y: number;
+  vx: number; 
+  vy: number; 
+  startX: number; 
+  damage: number;
+  faction: Faction;
+  active: boolean;
+  type: 'ARROW' | 'LIGHTNING_BOLT' | 'TOWER_SHOT'; 
+  rotation: number;
+  points?: {x: number, y: number}[]; // For Lightning zigzag
+  opacity?: number; // For fading effects
+  targetId?: string; // NEW: For homing arrows
+  fromSkill?: boolean; // NEW: If true, does not damage castle
+}
+
+export interface Particle {
+  id: string;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  color: string;
+  size: number;
+  gravity: boolean;
+}
+
+export interface Firework {
+  id: string;
+  x: number;
+  y: number;
+  color: string;
+  particles: Particle[];
+  exploded: boolean;
+  timer: number;
+}
+
+export interface EnvElement {
+  id: string;
+  type: 'CLOUD' | 'BIRD' | 'TREE' | 'GRASS';
+  x: number;
+  y: number;
+  speed: number;
+  scale: number;
+  variant: number; 
+}
+
+export interface LevelTheme {
+  skyTop: string;
+  skyBottom: string;
+  mountainColor: string;
+  groundColor: string;
+  treeTrunk: string;
+  treeLeaf1: string; // Primary leaf color
+  treeLeaf2: string; // Secondary/highlight leaf color
+  nameEn: string;
+  nameVn: string;
+}
+
+export interface GameLevel {
+  level: number;
+  enemySpawnRate: number;      
+  enemyStatMultiplier: number; 
+  enemySmartAI: boolean;       
+  enemyGoldDrip: number;
+  isBoss: boolean; 
+  isMultiplayer?: boolean; // New flag for online matches
+  isSpectator?: boolean;   // New flag: Watch mode
+  opponentName?: string;   // Name of the enemy player
+  opponentElo?: number;    // Elo of the enemy (controls AI difficulty)
+  mapThemeIndex?: number;  // Specific visual theme (0-11)
+  isRanked?: boolean;      // True if Ranked match
+}
+
+// Granular Upgrades
+export interface UpgradeState {
+  baseHp: number;
+  swordDamage: number;
+  archerDamage: number;
+  cavalryDamage: number;
+  spawnSpeed: number;
+  arrowRainPower: number;
+  lightningPower: number;
+  freezePower: number; 
+  heroPower: number; 
+  minerSpeed: number; // Acts as "Economy" level
+  maxPopUpgrade: number; // Number of extra slots purchased
+  passiveGold: number; // Extra passive gold level (0 to 4, resulting in 1 to 5 total)
+  towerPower: number; // New: Tower Damage Upgrade
 }
 
 export interface PlayerStats {
     wins: number;
     losses: number;
-    streak: number;
-    elo: number;
-}
-
-export interface CasualStats {
-    wins: number;
-    losses: number;
-    streak: number;
 }
 
 export interface PlayerProfile {
     name: string;
-    avatarSeed: string;
-    rankedStats: PlayerStats;
-    casualStats: CasualStats;
+    avatarSeed: string; // NEW: For generating consistent avatar
+    // Ranked Stats (Competitive)
+    rankedStats: PlayerStats & { 
+        elo: number; 
+        streak: number; // Winning streak for bonus points
+    };
+    // Casual/Friendly Stats
+    casualStats: PlayerStats & {
+        streak: number; // Winning streak for casual
+    };
+    
     rankTier: RankTier;
-    status: 'IDLE' | 'WAITING' | 'PLAYING' | 'OFFLINE';
+    status: 'IDLE' | 'WAITING' | 'PLAYING' | 'OFFLINE'; 
 }
 
+// --- NEW SOCIAL TYPES ---
 export interface ChatMessage {
     id: string;
     sender: string;
     text: string;
     rank: RankTier;
     timestamp: number;
-    topRank?: number;
     isSystem?: boolean;
+    topRank?: number; // Added to store leaderboard position (e.g., 1 for Top 1)
 }
 
 export interface LobbyRoom {
     id: string;
     name: string;
     host: string;
-    hostElo: number;
     status: 'WAITING' | 'PLAYING';
-    players: number;
+    players: number; // 1/2 or 2/2
     mapIndex: number;
-    guestName?: string;
-    guestElo?: number;
+    hostElo: number;
+    guestName?: string; // New: Opponent name
+    guestElo?: number;  // New: Opponent Elo
 }
 
-export interface AllianceMember {
-    name: string;
-    role: 'LEADER' | 'MEMBER';
-    contribution: number;
-    elo: number;
-    avatarSeed: string;
-}
-
-export interface Alliance {
-    id: string;
-    name: string;
-    tag: string;
-    level: number;
-    members: AllianceMember[];
-    requests: PlayerProfile[]; 
-    funds: number;
-    elo: number;
-}
-
-export interface TickerNotification {
-    id: string;
-    text: string;
-    type: 'SYSTEM' | 'PERSONAL' | 'ALLIANCE';
-    color?: string;
-}
+export type Language = 'VN' | 'EN';

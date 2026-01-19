@@ -192,7 +192,7 @@ export const generateBotNames = (count: number): string[] => {
     while(names.size < count) {
         const pool = ALL_NAMES[Math.floor(Math.random() * ALL_NAMES.length)];
         const base = pool[Math.floor(Math.random() * pool.length)];
-        const suffix = Math.floor(Math.random() * 9999); // Increased suffix range for 10k bots
+        const suffix = Math.floor(Math.random() * 999);
         names.add(`${base}${suffix}`);
     }
     return Array.from(names);
@@ -284,15 +284,6 @@ export const CHAT_TEMPLATES_EN = {
 export const ROOM_NAMES_VN = ["Giao lưu vui vẻ", "Tập luyện", "Thử nghiệm đội hình", "Vào là chiến", "Solo Yasuo", "Không chơi bẩn", "Tuyển bạn gái", "Phòng của Pro", "Newbie tập chơi", "Test tướng"];
 export const ROOM_NAMES_EN = ["1v1 Chill", "Practice", "Testing Builds", "Fight Club", "Noobs Only", "Pros Only", "Join Fast", "Friendly Match", "Casual Game", "Test Hero"];
 
-// ALLIANCE CONSTANTS
-export const ALLIANCE_NAMES_PREFIX = ["Dragon", "Royal", "Dark", "Holy", "Shadow", "Blood", "Iron", "Golden", "Storm", "Elite", "King", "God", "Viet", "Cyber", "Ninja"];
-export const ALLIANCE_NAMES_SUFFIX = ["Legion", "Empire", "Knights", "Slayers", "Warriors", "Guard", "Squad", "Clan", "Family", "Gang", "Union", "Dynasty"];
-
-export const TICKER_TEMPLATES = {
-    SYSTEM: ["Chúc mừng người chơi {name} đạt Top {rank}!", "Liên minh {alliance} vừa thăng hạng!", "Server đang rất sôi động với 10,000 người chơi!", "Bảo trì định kỳ vào 00:00 hàng ngày."],
-    PERSONAL: ["Người chơi {name} đạt chuỗi thắng {streak}!", "Cao thủ {name} vừa leo lên rank {tier}!", "Đại gia {name} vừa nạp gói VIP!"],
-    ALLIANCE: ["Liên minh {alliance} tuyển thành viên!", "Liên minh {alliance} vừa thắng lớn trong Chiến Tranh!", "Chúc mừng bang chủ {name} lập bang {alliance}!"]
-};
 
 // Translations
 export const TRANS = {
