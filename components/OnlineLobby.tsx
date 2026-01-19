@@ -29,6 +29,21 @@ const getAdjacentTiers = (current: RankTier): RankTier[] => {
     return tiers.slice(min, max + 1);
 };
 
+// Title Generator based on Rank
+const getRankTitle = (tier: RankTier, rankPos: number) => {
+    if (rankPos === 1) return "GOD OF WAR";
+    if (rankPos <= 10) return "WARLORD";
+    switch (tier) {
+        case RankTier.LEGEND: return "LEGENDARY";
+        case RankTier.CHALLENGER: return "GRANDMASTER";
+        case RankTier.DIAMOND: return "COMMANDER";
+        case RankTier.PLATINUM: return "VETERAN";
+        case RankTier.GOLD: return "KNIGHT";
+        case RankTier.SILVER: return "SOLDIER";
+        default: return "ROOKIE";
+    }
+};
+
 // Reuse RankIcon
 export const RankIcon: React.FC<{ tier: RankTier, className?: string }> = ({ tier, className }) => {
     const getDefs = () => (
@@ -206,7 +221,12 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
             return {
                 name,
                 avatarSeed: `${name}_${Math.random()}`,
-                rankedStats: { wins: 0, losses: 0, elo: baseElo, streak: 0 },
+                rankedStats: { 
+                    wins: 0, 
+                    losses: 0, 
+                    elo: baseElo, 
+                    streak: Math.random() > 0.7 ? Math.floor(Math.random() * 5) : 0 // Random streak
+                },
                 casualStats: { wins: Math.floor(Math.random() * 50), losses: Math.floor(Math.random() * 50), streak: Math.floor(Math.random() * 3) },
                 rankTier: getRankTier(baseElo),
                 status: Math.random() > 0.6 ? 'PLAYING' : 'IDLE'
@@ -362,10 +382,12 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
       
       winner.rankedStats.elo += gain;
       winner.rankedStats.wins++;
+      winner.rankedStats.streak++; // Win Streak
       winner.rankTier = getRankTier(winner.rankedStats.elo);
       
       loser.rankedStats.elo = Math.max(0, loser.rankedStats.elo - gain);
       loser.rankedStats.losses++;
+      loser.rankedStats.streak = 0; // Reset Streak
       loser.rankTier = getRankTier(loser.rankedStats.elo);
   };
 
@@ -438,11 +460,21 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
   };
 
   const runChatSimulation = () => {
-      // Just keep chat alive, similar logic to before
       if (Math.random() > 0.8) return; 
       
       const lb = leaderboardRef.current;
-      const idx = Math.floor(Math.random() * lb.length);
+      
+      // WEIGHTED RANDOM SELECTION TO FAVOR TOP PLAYERS
+      // We want the Top 100 to chat more frequently to feel "Alive"
+      let idx;
+      if (Math.random() < 0.4) {
+          // 40% chance to pick from Top 100
+          idx = Math.floor(Math.random() * 100);
+      } else {
+          // 60% chance to pick from random rest
+          idx = Math.floor(Math.random() * lb.length);
+      }
+
       const bot = lb[idx];
       
       if (!bot || bot.name === currentPlayerNameRef.current) return;
@@ -460,7 +492,7 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
           text: msg,
           rank: bot.rankTier,
           timestamp: Date.now(),
-          topRank: idx < 100 ? idx + 1 : undefined
+          topRank: idx + 1 // Save their exact rank position
       };
 
       setChatHistory(prev => {
@@ -651,23 +683,54 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
   
   const getSenderBadge = (rank?: number) => {
       if (!rank) return null;
-      if (rank === 1) return <span className="text-[10px] bg-yellow-500 text-black px-1 rounded font-bold mr-1">TOP 1</span>;
-      if (rank === 2) return <span className="text-[10px] bg-slate-300 text-black px-1 rounded font-bold mr-1">TOP 2</span>;
-      if (rank === 3) return <span className="text-[10px] bg-orange-400 text-black px-1 rounded font-bold mr-1">TOP 3</span>;
-      if (rank <= 10) return <span className="text-[10px] bg-red-500 text-white px-1 rounded font-bold mr-1">TOP {rank}</span>;
+      
+      // TOP 1: Crown/Gold
+      if (rank === 1) return (
+          <span className="inline-flex items-center bg-yellow-500 text-black px-1.5 py-0.5 rounded text-[10px] font-black border border-yellow-200 shadow-md mr-1 gap-1">
+              <span>👑</span> TOP 1
+          </span>
+      );
+      
+      // TOP 10: Red/Orange
+      if (rank <= 10) return (
+          <span className="inline-flex items-center bg-red-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold border border-red-400 mr-1">
+              TOP 10
+          </span>
+      );
+      
+      // TOP 50: Purple
+      if (rank <= 50) return (
+          <span className="inline-flex items-center bg-purple-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold border border-purple-400 mr-1">
+              TOP 50
+          </span>
+      );
+      
+      // TOP 100: Blue
+      if (rank <= 100) return (
+          <span className="inline-flex items-center bg-blue-600 text-white px-1.5 py-0.5 rounded text-[10px] font-bold border border-blue-400 mr-1">
+              TOP 100
+          </span>
+      );
+      
       return null;
   };
 
   const getSenderStyle = (rank?: number) => {
       if (!rank) return 'text-slate-300';
-      if (rank === 1) return 'text-yellow-400 font-black';
-      if (rank <= 3) return 'text-yellow-200 font-bold';
-      if (rank <= 10) return 'text-red-300 font-bold';
+      if (rank === 1) return 'text-yellow-300 font-black text-sm drop-shadow-md tracking-wide';
+      if (rank <= 10) return 'text-red-400 font-bold tracking-wide';
+      if (rank <= 50) return 'text-purple-400 font-bold';
+      if (rank <= 100) return 'text-blue-400 font-bold';
       return 'text-slate-300';
   };
 
   const renderDetailModal = () => {
       if (!selectedProfile) return null;
+      // Calculate rank position for title
+      const sortedLb = [...leaderboard].sort((a,b) => b.rankedStats.elo - a.rankedStats.elo);
+      const rankPos = sortedLb.findIndex(p => p.name === selectedProfile.name) + 1;
+      const title = getRankTitle(selectedProfile.rankTier, rankPos);
+
       return (
           <div className="absolute inset-0 z-[60] bg-black/80 flex items-center justify-center p-4" onClick={() => setSelectedProfile(null)}>
               <div className="bg-slate-800 border-2 border-slate-600 p-6 rounded-xl w-full max-w-sm shadow-2xl relative" onClick={e => e.stopPropagation()}>
@@ -676,8 +739,21 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                        <div className="w-20 h-20 bg-slate-700 rounded-full flex items-center justify-center text-4xl border-2 border-blue-500 mb-2 relative overflow-hidden">
                            <img src={getAvatarUrl(selectedProfile.avatarSeed || selectedProfile.name)} alt="Profile" className="w-full h-full object-cover" />
                        </div>
+                       
+                       {/* TITLE BADGE */}
+                       <div className={`px-3 py-1 rounded text-[10px] font-black tracking-widest uppercase mb-1 border shadow-lg
+                           ${rankPos === 1 ? 'bg-yellow-500 text-black border-white' : 
+                             rankPos <= 10 ? 'bg-red-600 text-white border-red-400' :
+                             rankPos <= 100 ? 'bg-blue-600 text-white border-blue-400' : 'bg-slate-700 text-slate-400 border-slate-600'}`}>
+                           {title}
+                       </div>
+
                        <h3 className="text-2xl font-black text-white tracking-wide uppercase">{selectedProfile.name}</h3>
-                       <div className="text-xs text-slate-400 uppercase tracking-widest font-bold mt-1">Warrior Profile</div>
+                       
+                       {/* RANK POSITION */}
+                       <div className="text-xs text-slate-400 font-bold mt-1">
+                           Server Rank: <span className="text-white">#{rankPos}</span>
+                       </div>
                   </div>
                   <div className="space-y-4">
                       <div className="bg-slate-900/80 p-4 rounded-lg border border-indigo-500/30 relative overflow-hidden">
@@ -685,12 +761,18 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
                               <span className="font-bold text-indigo-400 tracking-wider">RANKED SEASON</span>
                               <div className="flex flex-col items-center">
                                   <RankIcon tier={selectedProfile.rankTier} className="w-8 h-8" />
-                                  <span className="text-[10px] text-yellow-500 font-bold">{selectedProfile.rankedStats.elo}</span>
+                                  <span className="text-[10px] text-yellow-500 font-bold">{selectedProfile.rankedStats.elo} ELO</span>
                               </div>
                           </div>
                           <div className="grid grid-cols-2 gap-y-2 text-sm relative z-10">
                               <div className="text-slate-400">Wins: <span className="text-green-400 font-bold text-lg">{selectedProfile.rankedStats.wins}</span></div>
                               <div className="text-slate-400">Losses: <span className="text-red-400 font-bold text-lg">{selectedProfile.rankedStats.losses}</span></div>
+                              <div className="text-slate-400 col-span-2 flex items-center gap-2 mt-2 pt-2 border-t border-slate-700/50">
+                                  <span>Win Streak:</span> 
+                                  <span className="text-orange-400 font-bold text-lg flex items-center">
+                                      🔥 {selectedProfile.rankedStats.streak}
+                                  </span>
+                              </div>
                           </div>
                       </div>
                       
