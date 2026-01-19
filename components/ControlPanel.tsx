@@ -228,7 +228,12 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ gold, population, maxPopula
                 </div>
             </div>
             <div className="flex gap-1 justify-center md:justify-start pt-2">
-              {Object.values(UnitType).map((type) => (
+              {Object.values(UnitType).map((tVal) => {
+                const type = tVal as UnitType;
+                const countKey = type === UnitType.SWORDMAN ? 'sword' : type === UnitType.CAVALRY ? 'cav' : type.toLowerCase();
+                const count = unitCounts[countKey as keyof typeof unitCounts] || 0;
+                
+                return (
                 <UnitButton 
                   key={type} 
                   type={type} 
@@ -239,9 +244,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ gold, population, maxPopula
                   lang={lang}
                   onClick={() => onBuyUnit(type)}
                   onDismiss={() => onDismissUnit(type)}
-                  unitCount={unitCounts[type === UnitType.SWORDMAN ? 'sword' : type === UnitType.CAVALRY ? 'cav' : type.toLowerCase() as keyof typeof unitCounts] || 0}
+                  unitCount={count}
                 />
-              ))}
+              )})}
               
               {/* TOWER BUTTON */}
               <div className="relative border-l border-slate-600 pl-1 ml-1">
