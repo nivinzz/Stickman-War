@@ -1413,42 +1413,88 @@ export class GameEngine {
           }
       }
 
-      // 2. Spawn Logic (SIMULATING A PLAYER)
-      // In Multiplayer, AI behaves more aggressively and upgrades dynamically
-      const enemyUnits = this.units.filter(u => u.faction === Faction.ENEMY && u.state !== UnitState.DEAD && u.state !== UnitState.DIE);
-      const enemyMiners = enemyUnits.filter(u => u.type === UnitType.MINER).length;
-      
-      const targetMiners = Math.min(15, 3 + Math.floor(this.level.level / 2));
-      const queueMiners = this.enemyQueue.filter(q => q.type === UnitType.MINER).length;
+      const aiElo = this.level.opponentElo || 1000;
 
-      // Online AI: Prioritizes miners early, then balanced army
-      if (enemyMiners + queueMiners < targetMiners) {
-           this.queueUnit(UnitType.MINER, Faction.ENEMY);
-      } else {
-           if (this.enemyGold >= 100) { 
-                const r = Math.random();
-                let type = UnitType.SWORDMAN;
-                // Smarter unit composition for Online
-                if (this.level.isMultiplayer) {
-                     if (r < 0.3) type = UnitType.ARCHER;
-                     if (r < 0.1) type = UnitType.CAVALRY;
-                     if (this.enemyGold > 1000 && r < 0.05) type = UnitType.HERO;
-                } else {
-                    if (this.level.level >= 3 && r < 0.4) type = UnitType.ARCHER;
-                    if (this.level.level >= 6 && r < 0.15) type = UnitType.CAVALRY;
-                    if (this.level.level >= 10 && r < 0.05) type = UnitType.HERO;
-                }
-                
-                this.queueUnit(type, Faction.ENEMY);
-           }
+      // --- ADVANCED AI LOGIC FOR HIGH ELO (>= 2200) ---
+      if (this.level.isMultiplayer && aiElo >= 2200) {
+          // Detect enemy presence near base (Danger Zone)
+          const enemiesNearBase = this.units.filter(u => 
+              u.faction === Faction.PLAYER && 
+              u.state !== UnitState.DEAD &&
+              u.state !== UnitState.DIE &&
+              u.x > this.enemyVisibleX // Inside fog range near base
+          ).length;
+
+          const myUnits = this.units.filter(u => u.faction === Faction.ENEMY && u.state !== UnitState.DEAD && u.state !== UnitState.DIE);
+          const myMiners = myUnits.filter(u => u.type === UnitType.MINER).length;
+          const queueMiners = this.enemyQueue.filter(q => q.type === UnitType.MINER).length;
+
+          if (enemiesNearBase > 2) {
+              // EMERGENCY DEFENSE MODE
+              // 1. Prioritize Tower if affordable
+              if (this.enemyGold >= 2000 && this.enemyTowers < MAX_TOWERS) {
+                  this.buyTower(Faction.ENEMY);
+              }
+              
+              // 2. Buy Defenders (Sword/Archer) immediately
+              if (this.enemyGold >= 100) {
+                   // Prefer Archers if money allows, else Swords to block
+                   const type = this.enemyGold >= 200 && Math.random() > 0.3 ? UnitType.ARCHER : UnitType.SWORDMAN;
+                   this.queueUnit(type, Faction.ENEMY);
+              }
+          } else {
+              // ECONOMY & ATTACK MODE (Safe)
+              // 1. Build Economy first if low
+              if (myMiners + queueMiners < 15) {
+                  this.queueUnit(UnitType.MINER, Faction.ENEMY);
+              } else if (this.enemyGold >= 200) {
+                  // 2. Build Army when Eco is good
+                  const r = Math.random();
+                  if (this.level.isMultiplayer) {
+                       if (r < 0.3) this.queueUnit(UnitType.ARCHER, Faction.ENEMY);
+                       else if (r < 0.6) this.queueUnit(UnitType.SWORDMAN, Faction.ENEMY);
+                       else if (r < 0.8) this.queueUnit(UnitType.CAVALRY, Faction.ENEMY);
+                       else if (this.enemyGold > 1000) this.queueUnit(UnitType.HERO, Faction.ENEMY);
+                  }
+              }
+          }
+      } 
+      // --- STANDARD AI LOGIC (Low/Mid Elo) ---
+      else {
+          // 2. Spawn Logic (SIMULATING A PLAYER)
+          const enemyUnits = this.units.filter(u => u.faction === Faction.ENEMY && u.state !== UnitState.DEAD && u.state !== UnitState.DIE);
+          const enemyMiners = enemyUnits.filter(u => u.type === UnitType.MINER).length;
+          
+          const targetMiners = Math.min(15, 3 + Math.floor(this.level.level / 2));
+          const queueMiners = this.enemyQueue.filter(q => q.type === UnitType.MINER).length;
+
+          if (enemyMiners + queueMiners < targetMiners) {
+               this.queueUnit(UnitType.MINER, Faction.ENEMY);
+          } else {
+               if (this.enemyGold >= 100) { 
+                    const r = Math.random();
+                    let type = UnitType.SWORDMAN;
+                    if (this.level.isMultiplayer) {
+                         if (r < 0.3) type = UnitType.ARCHER;
+                         if (r < 0.1) type = UnitType.CAVALRY;
+                         if (this.enemyGold > 1000 && r < 0.05) type = UnitType.HERO;
+                    } else {
+                        if (this.level.level >= 3 && r < 0.4) type = UnitType.ARCHER;
+                        if (this.level.level >= 6 && r < 0.15) type = UnitType.CAVALRY;
+                        if (this.level.level >= 10 && r < 0.05) type = UnitType.HERO;
+                    }
+                    
+                    this.queueUnit(type, Faction.ENEMY);
+               }
+          }
+          
+          // 3. Tower Buying (Standard)
+          if (this.enemyGold > 2000 && this.enemyTowers < MAX_TOWERS && (this.level.level >= 5 || this.level.isMultiplayer)) {
+               this.buyTower(Faction.ENEMY);
+          }
       }
       
-      // 3. Tower Buying
-      if (this.enemyGold > 2000 && this.enemyTowers < MAX_TOWERS && (this.level.level >= 5 || this.level.isMultiplayer)) {
-           this.buyTower(Faction.ENEMY);
-      }
-      
-      // 4. Skills Usage (Smart AI)
+      // 4. Skills Usage (Smart AI - Always Active for Rank match)
       if (this.level.enemySmartAI || this.level.isMultiplayer) {
            const playerUnits = this.units.filter(u => u.faction === Faction.PLAYER && u.state !== UnitState.DEAD && u.state !== UnitState.DIE);
            if (playerUnits.length >= 4) {
@@ -1475,10 +1521,8 @@ export class GameEngine {
       
       // 5. Online AI: Self Upgrade (Simulation)
       if (this.level.isMultiplayer && this.frame % 300 === 0 && this.enemyGold > 500) {
-          // AI randomly upgrades stuff
           const keys: (keyof UpgradeState)[] = ['swordDamage', 'archerDamage', 'spawnSpeed', 'minerSpeed'];
           const pick = keys[Math.floor(Math.random() * keys.length)];
-          // Just cheat slightly and bump stats without cost for "Simulation" feel, or deduce gold
           if (this.enemyGold > 300) {
               this.enemyGold -= 300;
               this.enemyUpgrades[pick]++;

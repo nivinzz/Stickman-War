@@ -649,12 +649,33 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
               setSearchTimer(prev => prev + 1);
               if (searchTimer > 2 && Math.random() > 0.7) {
                   const foundProfile = leaderboardRef.current.find(p => p.name === playerName);
-                  const myRankTier = foundProfile ? foundProfile.rankTier : RankTier.BRONZE;
-                  const targetTiers = getAdjacentTiers(myRankTier);
-                  // Prioritize bots in similar Tier
-                  const pool = leaderboardRef.current.filter(p => p.name !== playerName && p.rankTier && targetTiers.includes(p.rankTier));
                   
-                  const opponent = getRandom<PlayerProfile>(pool.length ? pool : leaderboardRef.current);
+                  // NEW MATCHMAKING LOGIC: +/- 150 ELO
+                  const myElo = foundProfile ? foundProfile.rankedStats.elo : 100;
+                  const minElo = Math.max(0, myElo - 150);
+                  const maxElo = myElo + 150;
+
+                  // 1. STRICT SEARCH (Elo +/- 150)
+                  let pool = leaderboardRef.current.filter(p => 
+                      p.name !== playerName && 
+                      p.rankedStats.elo >= minElo && 
+                      p.rankedStats.elo <= maxElo
+                  );
+                  
+                  // 2. FALLBACK: Widen search slightly if no one found (rare)
+                  if (pool.length === 0) {
+                      pool = leaderboardRef.current.filter(p => 
+                          p.name !== playerName && 
+                          Math.abs(p.rankedStats.elo - myElo) < 300
+                      );
+                  }
+                  
+                  // 3. FINAL FALLBACK: Any random bot if server empty (shouldn't happen with 3000 bots)
+                  if (pool.length === 0) {
+                      pool = leaderboardRef.current.filter(p => p.name !== playerName);
+                  }
+
+                  const opponent = getRandom<PlayerProfile>(pool);
                   
                   if (opponent) {
                       onStartMatch(opponent.name, opponent.rankedStats.elo, Math.floor(Math.random() * 12), false, true);
