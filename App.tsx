@@ -127,12 +127,19 @@ const App: React.FC = () => {
   // Load My Profile for PvP Header
   useEffect(() => {
       if (isOnlineMatch && gameState === 'PLAYING') {
-          const savedLb = localStorage.getItem('stickman_bots_v6'); 
-          const myName = localStorage.getItem('stickman_player_name');
-          if (savedLb && myName) {
-              const lb: PlayerProfile[] = JSON.parse(savedLb);
-              const me = lb.find(p => p.name === myName);
-              if (me) setMyProfile(me);
+          // Priority: Load from Dedicated Profile Key
+          const savedProfile = localStorage.getItem('stickman_my_profile_v1');
+          if (savedProfile) {
+              setMyProfile(JSON.parse(savedProfile));
+          } else {
+              // Fallback to Leaderboard search
+              const savedLb = localStorage.getItem('stickman_bots_v6'); 
+              const myName = localStorage.getItem('stickman_player_name');
+              if (savedLb && myName) {
+                  const lb: PlayerProfile[] = JSON.parse(savedLb);
+                  const me = lb.find(p => p.name === myName);
+                  if (me) setMyProfile(me);
+              }
           }
       }
   }, [isOnlineMatch, gameState]);
@@ -161,6 +168,16 @@ const App: React.FC = () => {
       let lb: PlayerProfile[] = savedLb ? JSON.parse(savedLb) : [];
       
       let profile = lb.find(p => p.name === myName);
+      
+      // Fallback: If not in leaderboard, check dedicated profile
+      if (!profile) {
+          const savedProfile = localStorage.getItem('stickman_my_profile_v1');
+          if (savedProfile) {
+              profile = JSON.parse(savedProfile);
+              if (profile && profile.name !== myName) profile = null; // Name mismatch check
+          }
+      }
+
       if (!profile) {
           profile = { 
               name: myName, 
@@ -170,7 +187,12 @@ const App: React.FC = () => {
               rankTier: RankTier.BRONZE,
               status: 'IDLE' 
           };
+          // Only push to LB if we found nothing
           lb.push(profile);
+      } else {
+          // Ensure profile is in LB if it came from dedicated storage but wasn't in LB
+          const idx = lb.findIndex(p => p.name === myName);
+          if (idx === -1) lb.push(profile);
       }
       
       if (isRankedMatchRef.current) {
@@ -258,7 +280,10 @@ const App: React.FC = () => {
           setMatchResult(null); 
       }
       
+      // Update Global Leaderboard
       localStorage.setItem('stickman_bots_v6', JSON.stringify(lb));
+      // Update Dedicated Profile Storage (Safety Backup)
+      localStorage.setItem('stickman_my_profile_v1', JSON.stringify(profile));
       setMyProfile(profile); 
   };
 

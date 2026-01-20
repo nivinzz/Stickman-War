@@ -15,6 +15,7 @@ const STORAGE_KEY_BOT_ROOMS = 'stickman_bot_rooms_v1';
 const STORAGE_KEY_BOTS_DATA = 'stickman_bots_v6'; 
 const STORAGE_KEY_PLAYER_NAME = 'stickman_player_name';
 const STORAGE_KEY_ALLIANCE = 'stickman_alliance_v2'; 
+const STORAGE_KEY_MY_PROFILE = 'stickman_my_profile_v1'; // Dedicated Key
 
 function getRandom<T>(arr: T[]): T {
     return arr[Math.floor(Math.random() * arr.length)];
@@ -514,20 +515,30 @@ const OnlineLobby: React.FC<OnlineLobbyProps> = ({ onStartMatch, onBack, lang })
         fakeLb = [...fakeLb, ...newBots];
     }
 
+    // Try to load dedicated profile first to prevent data loss
+    const savedProfile = localStorage.getItem(STORAGE_KEY_MY_PROFILE);
+    let myStats = savedProfile ? JSON.parse(savedProfile) : null;
+
     if (currentName) {
         const meIndex = fakeLb.findIndex(p => p.name === currentName);
         if (meIndex === -1) {
-             const startElo = 100;
-             fakeLb.push({ 
+             // Use dedicated stats if available, else default 100
+             const startStats = (myStats && myStats.name === currentName) ? myStats : {
                 name: currentName,
                 avatarSeed: currentName,
-                rankedStats: { wins: 0, losses: 0, elo: startElo, streak: 0 },
+                rankedStats: { wins: 0, losses: 0, elo: 100, streak: 0 },
                 casualStats: { wins: 0, losses: 0, streak: 0 },
-                rankTier: getRankTier(startElo),
+                rankTier: RankTier.BRONZE,
                 status: 'IDLE' 
-            });
+             };
+             fakeLb.push(startStats);
         } else {
-            fakeLb[meIndex].status = 'IDLE';
+            // Update existing entry with dedicated stats if dedicated is valid
+            if (myStats && myStats.name === currentName) {
+                fakeLb[meIndex] = { ...fakeLb[meIndex], ...myStats, status: 'IDLE' };
+            } else {
+                fakeLb[meIndex].status = 'IDLE';
+            }
         }
     }
 
