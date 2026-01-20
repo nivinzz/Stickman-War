@@ -162,6 +162,7 @@ export interface GameLevel {
     opponentName?: string;
     opponentElo?: number;
     mapThemeIndex: number;
+    teammates?: PlayerProfile[];
 }
 
 export interface LevelTheme {

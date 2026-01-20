@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import GameCanvas from './components/GameCanvas';
 import ControlPanel from './components/ControlPanel';
@@ -6,7 +7,7 @@ import OnlineLobby, { RankIcon } from './components/OnlineLobby'; // Import Rank
 import { GameEngine } from './services/GameEngine';
 import { soundManager } from './services/SoundManager';
 import { UnitType, UpgradeState, GameLevel, Faction, UnitState, SpawnQueueItem, Language, PlayerProfile, RankTier } from './types';
-import { INITIAL_GOLD, TRANS, MAX_HEROES, LEVEL_THEMES, MAX_LEVEL, MAX_POPULATION, POP_UPGRADE_COST, MAX_POP_UPGRADES, PASSIVE_GOLD_UPGRADE_COST, MAX_PASSIVE_GOLD_LEVEL, MAX_TOWERS, getRankTier } from './constants';
+import { INITIAL_GOLD, TRANS, MAX_HEROES, LEVEL_THEMES, MAX_LEVEL, MAX_POPULATION, POP_UPGRADE_COST, MAX_POP_UPGRADES, PASSIVE_GOLD_UPGRADE_COST, MAX_PASSIVE_GOLD_LEVEL, MAX_TOWERS, getRankTier, getAvatarUrl } from './constants';
 
 // Match Result Interface
 interface MatchResult {
@@ -15,7 +16,7 @@ interface MatchResult {
     eloChange: number;
     currentRank: RankTier;
     isRankUp: boolean;
-    streak: number; // Added streak
+    streak: number; 
 }
 
 const App: React.FC = () => {
@@ -63,6 +64,9 @@ const App: React.FC = () => {
   const [opponentElo, setOpponentElo] = useState<number>(1000);
   const [mapThemeIndex, setMapThemeIndex] = useState<number>(0);
   
+  // New: Teammates for 3v3
+  const [teammates, setTeammates] = useState<PlayerProfile[]>([]);
+
   // Refs to solve closure staleness in syncState
   const isOnlineMatchRef = useRef(false);
   const isRankedMatchRef = useRef(false);
@@ -123,7 +127,7 @@ const App: React.FC = () => {
   // Load My Profile for PvP Header
   useEffect(() => {
       if (isOnlineMatch && gameState === 'PLAYING') {
-          const savedLb = localStorage.getItem('stickman_bots_v4');
+          const savedLb = localStorage.getItem('stickman_bots_v6'); 
           const myName = localStorage.getItem('stickman_player_name');
           if (savedLb && myName) {
               const lb: PlayerProfile[] = JSON.parse(savedLb);
@@ -152,13 +156,12 @@ const App: React.FC = () => {
       if (isSpectatorRef.current || resultProcessedRef.current) return; 
       resultProcessedRef.current = true; // Ensure runs once per match
 
-      const savedLb = localStorage.getItem('stickman_bots_v4'); 
+      const savedLb = localStorage.getItem('stickman_bots_v6'); 
       const myName = localStorage.getItem('stickman_player_name') || 'You';
       let lb: PlayerProfile[] = savedLb ? JSON.parse(savedLb) : [];
       
       let profile = lb.find(p => p.name === myName);
       if (!profile) {
-          // If for some reason profile is missing (should be fixed by Lobby self-repair), create temp
           profile = { 
               name: myName, 
               avatarSeed: myName,
@@ -170,9 +173,7 @@ const App: React.FC = () => {
           lb.push(profile);
       }
       
-      // Use Ref to check mode, as state might be stale in closure
       if (isRankedMatchRef.current) {
-          // RANKED LOGIC
           const oldElo = profile.rankedStats.elo;
           const oldRank = profile.rankTier;
           let eloChange = 0;
@@ -180,18 +181,59 @@ const App: React.FC = () => {
           if (win) {
               profile.rankedStats.wins++;
               profile.rankedStats.streak++;
-              // Bonus for streak
               let gain = 25;
               if (profile.rankedStats.streak >= 3) gain += 10; 
               if (profile.rankedStats.streak >= 5) gain += 15; 
-              
               eloChange = gain;
               profile.rankedStats.elo += eloChange;
+
+              // Alliance Logic (Funds & Elo)
+              if (teammates.length > 0) {
+                  const savedAl = localStorage.getItem('stickman_alliance_v2');
+                  if (savedAl) {
+                      const al = JSON.parse(savedAl);
+                      
+                      // 1. Add Funds
+                      al.funds += 1000;
+                      
+                      // 2. Update Alliance Elo
+                      const alEloChange = 25;
+                      al.elo += alEloChange;
+
+                      // 3. Update Personal Contribution
+                      const meInAl = al.members.find((m: any) => m.name === myName);
+                      if (meInAl) {
+                          meInAl.contribution += 1000;
+                          meInAl.elo = profile.rankedStats.elo; // Sync Elo
+                      }
+                      
+                      localStorage.setItem('stickman_alliance_v2', JSON.stringify(al));
+                  }
+              }
+
           } else {
               profile.rankedStats.losses++;
               profile.rankedStats.streak = 0;
               eloChange = -20;
               profile.rankedStats.elo = Math.max(0, profile.rankedStats.elo + eloChange);
+
+              // Alliance Elo Penalty on Loss
+              if (teammates.length > 0) {
+                  const savedAl = localStorage.getItem('stickman_alliance_v2');
+                  if (savedAl) {
+                      const al = JSON.parse(savedAl);
+                      const alEloChange = -20;
+                      al.elo = Math.max(0, al.elo + alEloChange);
+                      
+                      // Sync Elo only
+                      const meInAl = al.members.find((m: any) => m.name === myName);
+                      if (meInAl) {
+                          meInAl.elo = profile.rankedStats.elo;
+                      }
+                      
+                      localStorage.setItem('stickman_alliance_v2', JSON.stringify(al));
+                  }
+              }
           }
           
           profile.rankTier = getRankTier(profile.rankedStats.elo);
@@ -199,14 +241,13 @@ const App: React.FC = () => {
           setMatchResult({
               oldElo,
               newElo: profile.rankedStats.elo,
-              eloChange: win ? eloChange : (profile.rankedStats.elo - oldElo), // Actual diff incase of 0 floor
+              eloChange: win ? eloChange : (profile.rankedStats.elo - oldElo), 
               currentRank: profile.rankTier,
               isRankUp: profile.rankTier !== oldRank && win,
               streak: profile.rankedStats.streak
           });
 
       } else {
-          // CASUAL LOGIC
           if (win) {
               profile.casualStats.wins++;
               profile.casualStats.streak = (profile.casualStats.streak || 0) + 1;
@@ -214,12 +255,11 @@ const App: React.FC = () => {
               profile.casualStats.losses++;
               profile.casualStats.streak = 0;
           }
-          setMatchResult(null); // No Elo display for casual
+          setMatchResult(null); 
       }
       
-      // Save Immediately
-      localStorage.setItem('stickman_bots_v4', JSON.stringify(lb));
-      setMyProfile(profile); // Update state for UI
+      localStorage.setItem('stickman_bots_v6', JSON.stringify(lb));
+      setMyProfile(profile); 
   };
 
   const formatTime = (seconds: number) => {
@@ -244,7 +284,6 @@ const App: React.FC = () => {
       }
   };
 
-  // Sync engine state to React
   const syncState = (eng: GameEngine) => {
       setGold(Math.floor(eng.gold));
       
@@ -312,7 +351,7 @@ const App: React.FC = () => {
   };
 
   // UPDATED START GAME FUNCTION
-  const startGame = (lvl: number, isMultiplayer: boolean = false, oppName: string = '', oppElo: number = 1000, mapId: number = 0, isSpec: boolean = false, isRanked: boolean = false) => {
+  const startGame = (lvl: number, isMultiplayer: boolean = false, oppName: string = '', oppElo: number = 1000, mapId: number = 0, isSpec: boolean = false, isRanked: boolean = false, team: PlayerProfile[] = []) => {
     setPaused(false);
     setGameStarted(false); 
     setGameState('PLAYING');
@@ -328,14 +367,14 @@ const App: React.FC = () => {
 
     setOpponentName(oppName);
     setOpponentElo(oppElo);
-    setMatchResult(null); // Reset match result
-    resultProcessedRef.current = false; // Reset lock
+    setTeammates(team); // Set teammates state
+
+    setMatchResult(null); 
+    resultProcessedRef.current = false; 
     
-    // For Campaign, mapId is derived from level. For Online, it's passed.
     const finalMapId = isMultiplayer ? mapId : ((lvl - 1) % LEVEL_THEMES.length);
     setMapThemeIndex(finalMapId);
     
-    // Create Level Config
     const isBoss = lvl % 10 === 0;
     const gameLevel: GameLevel = {
       level: isMultiplayer ? (finalMapId * 5) + 1 : lvl, 
@@ -348,7 +387,8 @@ const App: React.FC = () => {
       isSpectator: isSpec,
       opponentName: oppName,
       opponentElo: oppElo,
-      mapThemeIndex: finalMapId
+      mapThemeIndex: finalMapId,
+      teammates: team // Pass to GameLevel config
     };
 
     let sessionUpgrades: UpgradeState;
@@ -410,7 +450,6 @@ const App: React.FC = () => {
           setUpgrades(prev => {
               const next = { ...prev, [type]: prev[type] + 1 };
               if (engine) engine.upgrades = next; 
-              
               if (type === 'baseHp' && engine) {
                   const oldMax = engine.playerMaxBaseHp;
                   engine.playerMaxBaseHp = 2000 * (1 + (next.baseHp * 0.1));
@@ -431,10 +470,7 @@ const App: React.FC = () => {
           const nextVal = engine.upgrades.maxPopUpgrade + 1;
           const nextUpgrades = { ...engine.upgrades, maxPopUpgrade: nextVal };
           engine.upgrades = nextUpgrades;
-          
-          if (!isOnlineMatch) {
-             setUpgrades(nextUpgrades);
-          }
+          if (!isOnlineMatch) setUpgrades(nextUpgrades);
           syncState(engine);
       }
   };
@@ -446,19 +482,14 @@ const App: React.FC = () => {
            const nextVal = (engine.upgrades.passiveGold || 0) + 1;
            const nextUpgrades = { ...engine.upgrades, passiveGold: nextVal };
            engine.upgrades = nextUpgrades;
-           
-           if (!isOnlineMatch) {
-               setUpgrades(nextUpgrades);
-           }
+           if (!isOnlineMatch) setUpgrades(nextUpgrades);
           syncState(engine);
       }
   };
   
   const handleBuyTower = () => {
       if (isSpectator) return;
-      if (engine) {
-          engine.buyTower(Faction.PLAYER);
-      }
+      if (engine) engine.buyTower(Faction.PLAYER);
   };
 
   const handleSetStrategy = (strategy: 'CHARGE' | 'DEFEND' | 'PATROL' | 'VANGUARD') => {
@@ -503,7 +534,7 @@ const App: React.FC = () => {
   };
 
   const handleRestart = () => {
-    startGame(level, isOnlineMatch, opponentName, opponentElo, mapThemeIndex, isSpectator, isRankedMatch); 
+    startGame(level, isOnlineMatch, opponentName, opponentElo, mapThemeIndex, isSpectator, isRankedMatch, teammates); 
   };
 
   const handleStartMatch = () => {
@@ -515,14 +546,12 @@ const App: React.FC = () => {
   };
 
   const handleBackToMenu = () => {
-      // EXIT CONFIRMATION LOGIC
       if (gameState === 'PLAYING' && isOnlineMatch && !engine?.victory && !engine?.gameOver && !isSpectator) {
           const msg = isRankedMatch 
             ? "Thoát trận sẽ bị tính là THUA và trừ Elo. Bạn chắc chắn?" 
             : "Thoát trận sẽ bị ghi nhận là THUA. Bạn chắc chắn?";
             
           if (window.confirm(msg)) {
-              // Count as loss
               updateLeaderboard(false);
               setEngine(null);
               setGameState('ONLINE_LOBBY');
@@ -540,16 +569,13 @@ const App: React.FC = () => {
       }
   };
 
-  // --- PROFILE VIEW LOGIC ---
   const handleViewProfile = (isMe: boolean) => {
       if (isMe) {
           setViewingProfile(myProfile);
       } else {
-          // Generate Mock Profile for Opponent based on Elo
           const oppTier = getRankTier(opponentElo);
-          // Fake win rate based on Elo
           const totalGames = Math.floor(Math.random() * 200) + 50;
-          const winRate = 0.4 + (opponentElo / 2500) * 0.3; // 40-70% winrate
+          const winRate = 0.4 + (opponentElo / 2500) * 0.3; 
           const wins = Math.floor(totalGames * winRate);
           
           const mockProfile: PlayerProfile = {
@@ -575,7 +601,6 @@ const App: React.FC = () => {
           <div className="absolute inset-0 z-[60] bg-black/80 flex items-center justify-center p-4 animate-fade-in" onClick={() => setViewingProfile(null)}>
               <div className="bg-slate-800 border-2 border-slate-600 p-6 rounded-xl w-full max-w-sm shadow-2xl relative" onClick={e => e.stopPropagation()}>
                   <button className="absolute top-2 right-4 text-slate-400 hover:text-white text-xl" onClick={() => setViewingProfile(null)}>✕</button>
-                  
                   <div className="flex flex-col items-center mb-6">
                        <div className="w-20 h-20 bg-slate-700 rounded-full flex items-center justify-center text-4xl border-2 border-blue-500 mb-2 relative overflow-hidden">
                            <div className="absolute inset-0 bg-gradient-to-br from-slate-600 to-slate-800 opacity-50"></div>
@@ -584,7 +609,6 @@ const App: React.FC = () => {
                        <h3 className="text-2xl font-black text-white tracking-wide uppercase">{viewingProfile.name}</h3>
                        <div className="text-xs text-slate-400 uppercase tracking-widest font-bold mt-1">Warrior Profile</div>
                   </div>
-
                   <div className="space-y-4">
                       <div className="bg-slate-900/80 p-4 rounded-lg border border-indigo-500/30 relative overflow-hidden">
                           <div className="absolute top-0 right-0 p-2 opacity-10 text-6xl">🏆</div>
@@ -612,52 +636,25 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center p-4 font-sans text-slate-100 select-none overflow-hidden relative">
       
-      {/* GLOBAL SETTINGS (TOP LEFT) */}
+      {/* GLOBAL SETTINGS */}
       <div className="absolute top-4 left-4 z-50 flex gap-2">
-          <button 
-             onClick={() => setLang(prev => prev === 'VN' ? 'EN' : 'VN')}
-             className="px-2 py-1 bg-slate-700 text-xs rounded border border-slate-500 hover:bg-slate-600 font-bold"
-          >
-             {lang === 'VN' ? '🇬🇧 EN' : '🇻🇳 VN'}
-          </button>
-          
-          <button 
-             onClick={toggleMute}
-             className={`px-2 py-1 rounded border hover:bg-slate-600 text-xs font-bold ${isMuted ? 'bg-red-800 border-red-600 text-red-200' : 'bg-slate-700 border-slate-500 text-white'}`}
-          >
-             {isMuted ? '🔇 MUTED' : '🔊 SOUND'}
-          </button>
+          <button onClick={() => setLang(prev => prev === 'VN' ? 'EN' : 'VN')} className="px-2 py-1 bg-slate-700 text-xs rounded border border-slate-500 hover:bg-slate-600 font-bold">{lang === 'VN' ? '🇬🇧 EN' : '🇻🇳 VN'}</button>
+          <button onClick={toggleMute} className={`px-2 py-1 rounded border hover:bg-slate-600 text-xs font-bold ${isMuted ? 'bg-red-800 border-red-600 text-red-200' : 'bg-slate-700 border-slate-500 text-white'}`}>{isMuted ? '🔇 MUTED' : '🔊 SOUND'}</button>
       </div>
 
-      {/* PROFILE MODAL */}
       {renderProfileModal()}
 
       {gameState === 'MENU' && (
         <div className="text-center space-y-6 animate-fade-in">
           <h1 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-500 mb-8">
             STICKMAN WAR
-            <span className="block text-2xl text-slate-400 font-normal mt-2">
-                Mountain Defense 
-                <span className="text-sm text-slate-500 bg-slate-800 px-2 py-1 rounded-full ml-2 align-middle">v1.5 Ranked PvP</span>
-            </span>
+            <span className="block text-2xl text-slate-400 font-normal mt-2">Mountain Defense <span className="text-sm text-slate-500 bg-slate-800 px-2 py-1 rounded-full ml-2 align-middle">v1.6 Ranked PvP</span></span>
           </h1>
           <div className="flex flex-col gap-4">
-            <button 
-                onClick={() => setGameState('LEVEL_SELECT')}
-                className="px-8 py-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-2xl shadow-lg transform transition hover:scale-105"
-            >
-                {t.start}
-            </button>
-            <button 
-                onClick={() => setGameState('ONLINE_LOBBY')}
-                className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xl shadow-lg transform transition hover:scale-105"
-            >
-                🌐 CHƠI ONLINE (PvP)
-            </button>
+            <button onClick={() => setGameState('LEVEL_SELECT')} className="px-8 py-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-2xl shadow-lg transform transition hover:scale-105">{t.start}</button>
+            <button onClick={() => setGameState('ONLINE_LOBBY')} className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xl shadow-lg transform transition hover:scale-105">🌐 CHƠI ONLINE (PvP)</button>
           </div>
-          <div className="text-slate-500 mt-8">
-            <p>{t.tip}</p>
-          </div>
+          <div className="text-slate-500 mt-8"><p>{t.tip}</p></div>
         </div>
       )}
       
@@ -665,8 +662,8 @@ const App: React.FC = () => {
           <OnlineLobby 
             lang={lang}
             onBack={() => setGameState('MENU')}
-            onStartMatch={(oppName, oppElo, mapId, isSpec, isRanked) => {
-                startGame(30, true, oppName, oppElo, mapId, isSpec, isRanked);
+            onStartMatch={(oppName, oppElo, mapId, isSpec, isRanked, team) => {
+                startGame(30, true, oppName, oppElo, mapId, isSpec, isRanked, team);
             }} 
           />
       )}
@@ -682,25 +679,12 @@ const App: React.FC = () => {
                         const theme = LEVEL_THEMES[(lvl - 1) % LEVEL_THEMES.length];
                         const isBoss = lvl % 10 === 0;
                         const record = levelRecords[lvl];
-                        
                         return (
-                            <button
-                                key={lvl}
-                                onClick={() => { if (!locked) { setLevel(lvl); startGame(lvl); } }}
-                                disabled={locked}
-                                className={`rounded-lg flex flex-col items-center justify-center border-2 transition-all relative overflow-hidden group
-                                    ${isBoss ? 'h-32 md:h-32 border-red-500 shadow-red-900/40' : 'h-20 md:h-24'}
-                                    ${locked ? 'bg-slate-800 border-slate-700 opacity-50 cursor-not-allowed' : 'bg-slate-700 border-slate-500 hover:bg-slate-600 hover:scale-105 cursor-pointer shadow-lg'}`}
-                            >
+                            <button key={lvl} onClick={() => { if (!locked) { setLevel(lvl); startGame(lvl); } }} disabled={locked} className={`rounded-lg flex flex-col items-center justify-center border-2 transition-all relative overflow-hidden group ${isBoss ? 'h-32 md:h-32 border-red-500 shadow-red-900/40' : 'h-20 md:h-24'} ${locked ? 'bg-slate-800 border-slate-700 opacity-50 cursor-not-allowed' : 'bg-slate-700 border-slate-500 hover:bg-slate-600 hover:scale-105 cursor-pointer shadow-lg'}`}>
                                 {!locked && <div className="absolute inset-0 opacity-20" style={{background: `linear-gradient(to bottom, ${theme.skyTop}, ${theme.groundColor})`}} />}
                                 <span className={`${isBoss ? 'text-4xl text-red-400' : 'text-xl'} font-black z-10`}>{lvl}</span>
                                 {isBoss && <span className="text-[10px] text-red-500 font-bold z-10 animate-pulse">BOSS</span>}
-                                {locked ? <span className="text-xs text-slate-500 mt-1 z-10">🔒</span> : 
-                                    <div className="z-10 flex flex-col items-center">
-                                         {!isBoss && <span className="text-[10px] text-slate-300 mt-1 uppercase font-bold hidden md:block">{lang === 'VN' ? theme.nameVn : theme.nameEn}</span>}
-                                         {record && <span className="text-[10px] text-yellow-400 font-mono bg-black/40 px-1 rounded mt-1">⏱️ {formatTime(record)}</span>}
-                                    </div>
-                                }
+                                {locked ? <span className="text-xs text-slate-500 mt-1 z-10">🔒</span> : <div className="z-10 flex flex-col items-center">{!isBoss && <span className="text-[10px] text-slate-300 mt-1 uppercase font-bold hidden md:block">{lang === 'VN' ? theme.nameVn : theme.nameEn}</span>}{record && <span className="text-[10px] text-yellow-400 font-mono bg-black/40 px-1 rounded mt-1">⏱️ {formatTime(record)}</span>}</div>}
                             </button>
                         );
                     })}
@@ -714,38 +698,47 @@ const App: React.FC = () => {
         <>
           <div className="w-full max-w-[95vw] flex justify-between items-center mb-1 px-2 md:px-4">
              <div className="flex items-center gap-2 md:gap-4 flex-1">
-                <div className="text-lg md:text-xl font-bold text-yellow-400 flex items-center gap-2 w-24">
-                    <span className="text-xl md:text-2xl">🪙</span> {gold}
-                </div>
+                <div className="text-lg md:text-xl font-bold text-yellow-400 flex items-center gap-2 w-24"><span className="text-xl md:text-2xl">🪙</span> {gold}</div>
                 {isOnlineMatch ? (
                     <div className="flex-1 flex justify-center items-center">
                         <div className="bg-slate-800/90 border border-slate-600 px-4 py-1 rounded-lg flex items-center gap-4 shadow-lg backdrop-blur-sm">
-                            {/* YOU (With Rank) */}
-                            <div className="flex items-center gap-2 cursor-pointer hover:bg-white/5 p-1 rounded" onClick={() => handleViewProfile(true)}>
-                                <RankIcon tier={myProfile?.rankTier || RankTier.BRONZE} className="w-8 h-8" />
-                                <div className="flex flex-col items-end">
-                                    <span className={`font-bold text-sm text-green-400`}>YOU</span>
-                                    <span className="text-[10px] text-yellow-500 font-mono">{myProfile?.rankedStats.elo || 100}</span>
-                                </div>
-                            </div>
-
-                            {/* VS */}
-                            <div className="bg-red-600 text-white font-black text-xs px-2 py-1 rounded skew-x-[-10deg]">VS</div>
-                            
-                            {/* OPPONENT (With Rank) */}
-                            <div className="flex items-center gap-2 cursor-pointer hover:bg-white/5 p-1 rounded" onClick={() => handleViewProfile(false)}>
-                                <RankIcon tier={getRankTier(opponentElo)} className="w-8 h-8" />
-                                <div className="flex flex-col items-start">
-                                    <span className="font-bold text-sm text-red-400">{opponentName}</span>
-                                    <span className="text-[10px] text-yellow-500 font-mono">{opponentElo}</span>
-                                </div>
-                            </div>
+                            {/* YOU (With Teammates) */}
+                            {teammates.length > 0 ? (
+                                <>
+                                    {/* 3v3 LEFT */}
+                                    <div className="flex -space-x-3 items-center hover:scale-105 transition-transform cursor-pointer" onClick={() => handleViewProfile(true)}>
+                                        <div className="w-10 h-10 rounded-full border-2 border-green-500 overflow-hidden bg-slate-700 z-30" title="You"><img src={getAvatarUrl(myProfile?.avatarSeed || 'me')} className="w-full h-full object-cover" /></div>
+                                        <div className="w-9 h-9 rounded-full border-2 border-blue-500 overflow-hidden bg-slate-700 z-20" title={teammates[0].name}><img src={getAvatarUrl(teammates[0].avatarSeed)} className="w-full h-full object-cover" /></div>
+                                        <div className="w-8 h-8 rounded-full border-2 border-blue-500 overflow-hidden bg-slate-700 z-10" title={teammates[1].name}><img src={getAvatarUrl(teammates[1].avatarSeed)} className="w-full h-full object-cover" /></div>
+                                        <div className="ml-4 flex flex-col items-end"><span className="font-bold text-sm text-green-400">TEAM</span><span className="text-[10px] text-yellow-500 font-mono">{myProfile?.rankedStats.elo} AVG</span></div>
+                                    </div>
+                                    <div className="mx-4"><div className="bg-red-600 text-white font-black text-xs px-2 py-1 rounded skew-x-[-10deg]">VS</div></div>
+                                    {/* 3v3 RIGHT */}
+                                    <div className="flex flex-row-reverse -space-x-3 space-x-reverse items-center hover:scale-105 transition-transform cursor-pointer" onClick={() => handleViewProfile(false)}>
+                                        <div className="w-10 h-10 rounded-full border-2 border-red-500 overflow-hidden bg-slate-700 z-30"><img src={getAvatarUrl(opponentName)} className="w-full h-full object-cover" /></div>
+                                        <div className="w-9 h-9 rounded-full border-2 border-red-500 overflow-hidden bg-slate-700 z-20 opacity-80"><img src={getAvatarUrl(opponentName + "_2")} className="w-full h-full object-cover" /></div>
+                                        <div className="w-8 h-8 rounded-full border-2 border-red-500 overflow-hidden bg-slate-700 z-10 opacity-60"><img src={getAvatarUrl(opponentName + "_3")} className="w-full h-full object-cover" /></div>
+                                        <div className="mr-4 flex flex-col items-start"><span className="font-bold text-sm text-red-400">ENEMIES</span><span className="text-[10px] text-yellow-500 font-mono">{opponentElo} AVG</span></div>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    {/* 1v1 */}
+                                    <div className="flex items-center gap-2 cursor-pointer hover:bg-white/5 p-1 rounded" onClick={() => handleViewProfile(true)}>
+                                        <RankIcon tier={myProfile?.rankTier || RankTier.BRONZE} className="w-8 h-8" />
+                                        <div className="flex flex-col items-end"><span className={`font-bold text-sm text-green-400`}>YOU</span><span className="text-[10px] text-yellow-500 font-mono">{myProfile?.rankedStats.elo || 100}</span></div>
+                                    </div>
+                                    <div className="bg-red-600 text-white font-black text-xs px-2 py-1 rounded skew-x-[-10deg]">VS</div>
+                                    <div className="flex items-center gap-2 cursor-pointer hover:bg-white/5 p-1 rounded" onClick={() => handleViewProfile(false)}>
+                                        <RankIcon tier={getRankTier(opponentElo)} className="w-8 h-8" />
+                                        <div className="flex flex-col items-start"><span className="font-bold text-sm text-red-400">{opponentName}</span><span className="text-[10px] text-yellow-500 font-mono">{opponentElo}</span></div>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 ) : (
-                    <div className="bg-slate-800 px-3 py-1 rounded text-xs md:text-sm text-slate-300 flex items-center gap-2">
-                        <span>{level % 10 === 0 ? <span className="text-red-400 font-bold">{t.bossLevel} {level}</span> : `Level ${level}`}</span>
-                    </div>
+                    <div className="bg-slate-800 px-3 py-1 rounded text-xs md:text-sm text-slate-300 flex items-center gap-2"><span>{level % 10 === 0 ? <span className="text-red-400 font-bold">{t.bossLevel} {level}</span> : `Level ${level}`}</span></div>
                 )}
                 <div className={`font-mono font-bold w-16 text-right ${timeElapsed > 900 ? 'text-red-500 animate-pulse' : 'text-slate-300'}`}>⏱️ {formatTime(timeElapsed)}</div>
              </div>
@@ -758,16 +751,13 @@ const App: React.FC = () => {
 
           <div className="relative">
             <GameCanvas engine={engine} targetingSkill={activeSkill} onSkillUsed={handleSkillUsed} />
-            {!isSpectator && (
-                <UpgradeMenu upgrades={isOnlineMatch ? engine.upgrades : upgrades} gold={gold} onUpgrade={handleUpgrade} lang={lang} maxReachedLevel={isOnlineMatch ? 60 : maxReachedLevel} />
-            )}
-            
+            {!isSpectator && (<UpgradeMenu upgrades={isOnlineMatch ? engine.upgrades : upgrades} gold={gold} onUpgrade={handleUpgrade} lang={lang} maxReachedLevel={isOnlineMatch ? 60 : maxReachedLevel} />)}
             {(!gameStarted || paused) && (
                 <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-40 backdrop-blur-sm">
                     {!gameStarted ? (
                         <div className="text-center animate-bounce">
-                            <h2 className="text-4xl font-black text-white mb-4">{isSpectator ? 'WATCH MATCH' : (isOnlineMatch ? 'PVP MATCH' : t.ready)}</h2>
-                             {isOnlineMatch && <div className="text-xl text-blue-400 font-bold mb-4">{isSpectator ? opponentName : `YOU vs ${opponentName}`}</div>}
+                            <h2 className="text-4xl font-black text-white mb-4">{isSpectator ? 'WATCH MATCH' : (isOnlineMatch ? (teammates.length > 0 ? 'ALLIANCE WAR' : 'PVP MATCH') : t.ready)}</h2>
+                             {isOnlineMatch && <div className="text-xl text-blue-400 font-bold mb-4">{isSpectator ? opponentName : (teammates.length > 0 ? `TEAM vs ENEMY SQUAD` : `YOU vs ${opponentName}`)}</div>}
                             <button onClick={handleStartMatch} className="px-8 py-4 bg-green-600 hover:bg-green-500 rounded-lg text-2xl font-bold shadow-lg text-white">{isSpectator ? 'Start Watching' : t.go}</button>
                         </div>
                     ) : (
@@ -781,14 +771,7 @@ const App: React.FC = () => {
           </div>
 
           <div className={`w-full max-w-[85vw] flex flex-col items-center ${isSpectator ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
-             <ControlPanel 
-                gold={gold} population={population} maxPopulation={maxPopulation} heroPopulation={heroPopulation} unitCounts={unitCounts} spawnQueue={spawnQueue}
-                onBuyUnit={handleBuyUnit} onDismissUnit={handleDismissUnit} activeSkill={activeSkill} onUseSkill={(skill) => setActiveSkill(skill === activeSkill ? null : skill)}
-                onSetStrategy={handleSetStrategy} onSetVanguardPct={handleSetVanguardPct} vanguardPointSet={vanguardPointSet} vanguardPercentage={vanguardPercentage}
-                onBuyPopUpgrade={handleBuyPopUpgrade} onBuyPassiveGoldUpgrade={handleBuyPassiveGoldUpgrade} onBuyTower={handleBuyTower} towerCount={towerCount}
-                passiveGoldLevel={isOnlineMatch ? engine.upgrades.passiveGold : (upgrades.passiveGold || 0)} rallyPointSet={rallyPointSet} patrolPointSet={patrolPointSet} 
-                cooldowns={cooldowns} activeTimers={activeTimers} maxDurations={maxDurations} lang={lang}
-             />
+             <ControlPanel gold={gold} population={population} maxPopulation={maxPopulation} heroPopulation={heroPopulation} unitCounts={unitCounts} spawnQueue={spawnQueue} onBuyUnit={handleBuyUnit} onDismissUnit={handleDismissUnit} activeSkill={activeSkill} onUseSkill={(skill) => setActiveSkill(skill === activeSkill ? null : skill)} onSetStrategy={handleSetStrategy} onSetVanguardPct={handleSetVanguardPct} vanguardPointSet={vanguardPointSet} vanguardPercentage={vanguardPercentage} onBuyPopUpgrade={handleBuyPopUpgrade} onBuyPassiveGoldUpgrade={handleBuyPassiveGoldUpgrade} onBuyTower={handleBuyTower} towerCount={towerCount} passiveGoldLevel={isOnlineMatch ? engine.upgrades.passiveGold : (upgrades.passiveGold || 0)} rallyPointSet={rallyPointSet} patrolPointSet={patrolPointSet} cooldowns={cooldowns} activeTimers={activeTimers} maxDurations={maxDurations} lang={lang} />
           </div>
         </>
       )}
@@ -832,7 +815,6 @@ const App: React.FC = () => {
                      <button onClick={handleNextLevel} className="px-6 py-3 bg-green-600 hover:bg-green-500 rounded-lg font-bold shadow-lg text-white">{t.next}</button>
                 ) : (
                     <>
-                        {/* Only show Restart if NOT ranked match */}
                         {(!isOnlineMatch || !isRankedMatchRef.current) && (
                             <button onClick={handleRestart} className="px-6 py-3 bg-red-600 hover:bg-red-500 rounded-lg font-bold shadow-lg text-white">
                                 {isOnlineMatch ? (isSpectator ? 'Replay' : 'Đấu Lại') : t.restart}
